@@ -1,0 +1,4 @@
+build/
+dist/
+zoidberg-w7x/_version.py
+*.egg-info/

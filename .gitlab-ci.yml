@@ -1,0 +1,45 @@
+image: "python:3.8"
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  before_script:
+  - python3 --version
+  - pip3 install -U build
+  script:
+  - python3 -m build .
+  artifacts:
+    paths:
+      - dist
+
+
+### No docs yet
+# pages:
+#   stage: deploy
+#   before_script:
+#   - python3 --version
+#   - pip3 install -U sphinx sphinx_argparse_cli
+
+#   script:
+#   - pip install -i https://dave:${PYPI_PULL}@gitlab.mpcdf.mpg.de/api/v4/projects/6700/packages/pypi/simple .
+#   - sphinx-build docs/ public/
+
+#   artifacts:
+#     paths:
+#       - public
+
+pypi:
+  stage: deploy
+
+  only:
+    - tags
+
+  before_script:
+  - python3 --version
+  - pip3 install -U twine
+
+  script:
+  - TWINE_PASSWORD=${PYPI_PUSH} TWINE_USERNAME=PYPI-0 python -m twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/6700/packages/pypi dist/*
