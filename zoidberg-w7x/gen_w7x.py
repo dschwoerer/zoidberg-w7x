@@ -2,8 +2,16 @@
 import sys
 import re
 
+try:
+    import proxy_local_12345
+except ImportError:
+    pass
+
 from . import zoidberg_examples as zbe
 from boututils.datafile import DataFile
+import zoidberg
+
+from . import version, soft_name
 
 # conf          name
 # 0	w7x	standard case
@@ -11,11 +19,6 @@ from boututils.datafile import DataFile
 # 4	w7x	high iota
 # 6	w7x	high mirror
 
-
-try:
-    import proxy_local_12345
-except ImportError:
-    pass
 
 debug = False
 
@@ -37,11 +40,10 @@ def gen(conf, shape, **kw):
             **kw,
         )
         with DataFile(fn, write=True) as f:
-            for ff in __file__, zbe.__file__:
-                with open(ff) as f2:
-                    code = f2.read()
-                ff = ff.split("/")[-1]
-                f.write_file_attribute(ff, code)
+            f.write_file_attribute(soft_name + "_version", version)
+            f.write_file_attribute("zoidberg_version", zoidberg.__version__)
+            f.write_file_attribute("software_name", soft_name)
+            f.write_file_attribute("software_version", version)
 
 
 def gen2(fn):
