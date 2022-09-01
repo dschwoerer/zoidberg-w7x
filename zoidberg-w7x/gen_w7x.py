@@ -47,16 +47,25 @@ def gen(conf, shape, **kw):
 
 
 def gen2(fn):
-    args = re.findall(r"W7X-conf(\d+)-(\d+)x(\d+)x(\d+).fci", fn)
+    args = re.findall(r"W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci", fn)
     if not args:
         print(f"'{fn}' is not a valid filename")
         return
 
     assert len(args) == 1
-    args = [int(x) for x in args[0]]
+    args = [int(x) for x in args[0][:4]] + list(args[0][4:])
     conf = args[0]
-    shape = args[1:]
-    gen(conf, shape, field_refine=0)
+    shape = args[1:4]
+    known_opts = dict(
+        full=dict(full_torus=True),
+    )
+    kw = {}
+    for opt in args[4].split("."):
+        if not opt:
+            continue
+        kw.update(known_opts[opt])
+    print(kw)
+    gen(conf, shape, field_refine=0, **kw)
 
 
 def help(exit=0):

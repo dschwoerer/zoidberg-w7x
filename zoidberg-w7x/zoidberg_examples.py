@@ -272,6 +272,7 @@ def W7X(
     field_refine=1,
     trace_web=True,
     avoid_double_outer=True,
+    full_torus=False,
 ):
 
     if vmec_url is None:
@@ -286,7 +287,7 @@ def W7X(
             )
         vmec_url = urls[configuration]
 
-    yperiod = 2 * np.pi / 5.0
+    yperiod = 2 * np.pi if full_torus else 2 * np.pi / 5.0
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
     outer_lines = None
     history_outer = {}
@@ -326,7 +327,7 @@ def W7X(
         zmin = -1.35
         zmax = -zmin
         field = zb.field.W7X_vacuum(
-            phimax=2 * np.pi / 5.0,
+            phimax=yperiod,
             x_range=[xmin, xmax],
             z_range=[zmin, zmax],
             include_plasma_field=plasma_field,
@@ -356,7 +357,7 @@ def W7X(
         if field_refine:
             field = zb.field.W7X_vacuum(
                 *[x * field_refine for x in (128, 32, 128)],
-                phimax=2 * np.pi / 5.0,
+                phimax=yperiod,
                 x_range=[xmin, xmax],
                 z_range=[zmin, zmax],
                 include_plasma_field=plasma_field,
