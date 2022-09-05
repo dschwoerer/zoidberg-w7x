@@ -8,4 +8,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-write_to = "zoidberg-w7x/_version.py"
+write_to = "zoidberg_w7x/_version.py"

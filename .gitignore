@@ -1,6 +1,6 @@
 build/
 dist/
-zoidberg-w7x/_version.py
+zoidberg_w7x/_version.py
 *.egg-info/
 
 *.cache
