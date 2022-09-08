@@ -23,8 +23,7 @@ from . import version, soft_name
 debug = False
 
 
-def gen(conf, shape, **kw):
-    fn = f"""W7X-conf{conf}-{"x".join([str(d) for d in shape])}.fci.nc"""
+def gen(conf, shape, fn, **kw):
     print(fn)
     with zbe.timeit():
         zbe.W7X(
@@ -65,7 +64,7 @@ def gen2(fn):
             continue
         kw.update(known_opts[opt])
     print(kw)
-    gen(conf, shape, field_refine=0, **kw)
+    gen(conf, shape, fn, field_refine=0, **kw)
 
 
 def help(exit=0):
