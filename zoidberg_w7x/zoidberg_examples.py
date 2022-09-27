@@ -615,19 +615,91 @@ def get_tracer(_cache={}):
 
 
 def connection_length(RZ, phi, conf, limit):
+    """
+    Calculate the connection length.
+
+    RZ: RZ coorindates
+
+    """
     m = hashlib.md5()
     for var in [*RZ, phi]:
-        m.update("-".join([str(x) for x in var]).encode())
-    m.update("-".join([str(x) for x in phi]).encode())
-    fn = f"w7x_poincare_{conf}_{m.hexdigest()[:10]}.cache"
+        try:
+            m.update("-".join([str(x) for x in var]).encode())
+        except TypeError:
+            m.update(str(var).encode())
+    # m.update("-".join([str(x) for x in phi]).encode())
+    fn = f"w7x_poincare_{conf}_{m.hexdigest()[:10]}.cache.nc"
     try:
-        dat = np.loadtxt(fn)
-        dat.shape = (2, -1, 2, dat.shape[-1])
-        return dat
+        return xr.open_dataset(fn)
     except:
         print("nocache:", fn)
     flt = get_tracer()
     pnts = flt.types.Points3D()
+    R, Z = RZ
+    pnts.x1 = np.ravel(R * np.cos(phi))
+    pnts.x2 = np.ravel(R * np.sin(phi))
+    pnts.x3 = np.ravel(Z)
+
+    config = flt.types.MagneticConfig()
+    config.configIds = [conf]
+
+    task = flt.types.Task()
+    task.step = 1e-2
+    con = flt.types.ConnectionLength()
+    con.limit = limit
+    con.returnLoads = False
+    task.connection = con
+
+    machine = flt.types.Machine(1)
+    machine.grid.numX, machine.grid.numY, machine.grid.numZ = 500, 500, 100
+    machine.grid.ZMin, machine.grid.ZMax = -1.5, 1.5
+    machine.grid.YMin, machine.grid.YMax = -7, 7
+    machine.grid.XMin, machine.grid.XMax = -7, 7
+
+    machine.assemblyIds = [2, 5, 6, 7, 9, 15, 16, 17]  # [1]
+    task.machine = machine
+
+    # grid = flt.types.Grid()
+    # config.grid = grid
+    # grid.fieldSymmetry = 1
+
+    # cyl = flt.types.CylindricalGrid()
+    # grid.cylindrical = cyl
+    # cyl.numR, cyl.numZ, cyl.numPhi = 181, 181, 481
+    # cyl.RMin, cyl.RMax, cyl.ZMin, cyl.ZMax = 4.05, 6.75, -1.35, 1.35
+
+    # machine = flt.types.Machine(1)
+    # machine.grid.numX, machine.grid.numY, machine.grid.numZ = 500, 500, 100
+    # machine.grid.ZMin, machine.grid.ZMax = -1.5, 1.5
+    # machine.grid.YMin, machine.grid.YMax = -7, 7
+    # machine.grid.XMin, machine.grid.XMax = -7, 7
+    # machine.meshedModelsIds = [164]
+    # machine.assemblyIds = [14, 8, 9, 13, 21]
+
+    out = np.empty((4, 2, R.size)) * np.nan
+    for config.inverseField in False, True:
+
+        res = flt.service.trace(pnts, config, task, machine)
+        print(res)
+        print(res.connection)
+        for i, con in enumerate(res.connection):
+            out[0, int(config.inverseField), i] = con.length
+            if con.element is not None:
+                for j, var in enumerate((con.x, con.y, con.z)):
+                    out[j + 1, int(config.inverseField), i] = var
+
+    out.shape = (4, 2, *R.shape)
+    ds = xr.Dataset()
+    dims = "tracing_direction", *R.dims
+    print(out.shape, dims, len(dims), len(out.shape))
+    ds["con_length"] = list(dims), out[0]
+    ds["end_point"] = list(("spatial", *dims)), out[1:]
+
+    ds = ds.assign_coords(
+        tracing_direction=["forward", "backwards"], spatial=list("xyz"), **R.coords
+    )
+    ds.to_netcdf(fn)
+    return ds
 
 
 def trace_boundary(fn, conf):
