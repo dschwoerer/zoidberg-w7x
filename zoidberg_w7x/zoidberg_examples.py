@@ -468,16 +468,19 @@ def W7X(
     with timeit("Creating maps took %f"):
         maps = zb.make_maps(grid, field, field_tracer=tracer)
     maps["phi"] = ycoords
-    zb.write_maps(grid, field, maps, str(fname), metric2d=False)
+    with timeit("Writing maps took %f"):
+        zb.write_maps(grid, field, maps, str(fname), metric2d=False)
 
-    if calc_curvature:
-        print("calculating curvature...")
-        calc_curvilinear_curvature(fname, field, grid, maps)
+    with timeit("Calculating curvature took %f"):
+        if calc_curvature:
+            print("calculating curvature...")
+            calc_curvilinear_curvature(fname, field, grid, maps)
 
-    if calc_curvature and smooth_curvature:
-        smooth_metric(
-            fname, write_to_file=True, return_values=False, smooth_metric=True
-        )
+    with timeit("Smoothing curvature took %f"):
+        if calc_curvature and smooth_curvature:
+            smooth_metric(
+                fname, write_to_file=True, return_values=False, smooth_metric=True
+            )
 
     if show_maps:
         zb.plot.plot_forward_map(grid, maps, yslice=-1)
