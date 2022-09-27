@@ -375,7 +375,7 @@ def W7X(
             )
 
     tracer = (
-        zb.fieldtracer.FieldTracerWeb(configId=configuration, stepsize=0.01)
+        zb.fieldtracer.FieldTracerWeb(configId=configuration, stepsize=0.01, retry=100)
         if trace_web
         else None
     )
