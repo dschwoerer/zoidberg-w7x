@@ -740,31 +740,50 @@ def connection_length(RZ, phi, conf, limit):
 
 
 def trace_boundary(fn, conf):
-    with DataFile(fn) as dat:
+    with DataFile(fn, write=True) as dat:
         nx = dat["nx"]
         mxg = dat.get("MXG", 2)
         myg = dat.get("MYG", 1)
-        phi = dat["phi"]
-        limit = np.max(dat["R"]) * np.max(dat["dy"]) * (myg + 0.5)
+        phi = dat["phi"][None, :, None]
+        limit = np.max(dat["R"]) * np.max(dat["dy"]) * (myg + 1.0)
 
-        for fwd, dir in zip(("forward", "backward"), (1, -1)):
+        xyz = dat["R"] * np.cos(phi), dat["R"] * np.sin(phi), dat["Z"]
+        outs = np.empty((4, *dat["R"].shape))
+        for fwd, dir in zip(("forward", "backward"), (False, True)):
             xtp = dat[fwd + "_xt_prime"]
             bnd = xtp > nx - mxg - 1
-            RZ = dat["R"][bnd], dat["Z"][bnd]
+            bnd[-mxg:] = False
+            if 0:
+                while np.sum(bnd) > 100:
+                    bnd = np.logical_and(bnd, np.random.random(xyz[0].shape) > 0.5)
+                    print(np.sum(bnd))
+            print(np.sum(bnd))
+            print(limit, type(limit))
+            out = _connection_length([x[bnd] for x in xyz], conf, float(limit), dir)
+            print("bad", np.sum(~np.isfinite(out[1])))
+            # out = _connection_length([x[bnd] for x in xyz], conf, float(limit), not dir)
+            # print("badv2", np.sum(~np.isfinite(out[1])))
+
+            outs *= np.nan
+            outs[:, bnd] = out[:, 0, :]
+            dat.write(f"{fwd}_length", outs[0] / dat["R"] / dat["dy"])
+            for d, i in zip("xyz", range(1, 5)):
+                dat.write(f"{fwd}_end_{d}", outs[i] / dat["R"] / dat["dy"])
+            print(out)
+
         return
 
 
 def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e-3):
     import xarray as xr
 
-    m = hashlib.md5()
+    print(symmetry)
+
     start_r = np.array(start_r)
     start_z = np.array(start_z)
-    for var in start_r, start_z, yslices, [symmetry, npoints, step]:
-        m.update("-".join([str(x) for x in var]).encode())
 
     assert yslices[0] == 0
-    fn = f"w7x_poincare_{conf}_{m.hexdigest()[:10]}.cache.nc"
+    fn = f"w7x_poincare_{conf}_{myhash(start_r, start_z, yslices, [symmetry, npoints, step])}.cache.nc"
     try:
         dat = xr.open_dataarray(fn)
         return dat
@@ -813,7 +832,9 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
                     ln = len(r)
                     if ln != npoints:
                         print(i0, i1, i2, i3, ln, npoints)
-                    assert np.isclose(yslices0[i1], s.phi0 % (2 * np.pi / symmetry))
+                    assert np.isclose(
+                        yslices0[i1], s.phi0 % (2 * np.pi / symmetry)
+                    ), f"{yslices0[i1]} is not close to {s.phi0 % (2 * np.pi / symmetry)}"
                     dat[0, i1, i3, i2, i0, :ln] = r
                     dat[1, i1, i3, i2, i0, :ln] = xyz[2]
                     i += 1
@@ -842,13 +863,11 @@ def get_W7X_poincare(R, phi, conf, nz, symmetry=5):
 def _get_W7X_poincare(R, phi, conf, symmetry):
     import xarray as xr
 
-    m = hashlib.md5()
-    m.update("-".join([str(x) for x in phi]).encode())
-
-    fn = f"w7x_poincare_{conf}_{R}_{m.hexdigest()[:10]}.cache.nc"
+    fn = f"w7x_poincare2_{conf}_{myhash(R, phi, conf)}.cache.nc"
     try:
-        return xr.open_dataarray(fn)
-    except FileNotFoundError:
+        dat = xr.open_dataarray(fn)
+        return dat
+    except:
         pass
 
     pnc = trace_poincare([R], [0], phi, 50, conf, symmetry=symmetry)
@@ -859,7 +878,7 @@ def _get_W7X_poincare(R, phi, conf, symmetry):
             r *= k
         return r
 
-    newshape = (pnc.shape[0], pnc.shape[1], _prod(pnc.shape[2:]))
+    newshape = (pnc.shape[0], pnc.shape[1], np.prod(pnc.shape[2:]))
     out = np.empty(newshape)
     for i, phi in enumerate(pnc.phi):
         rz = pnc.sel(phi=phi)
@@ -870,7 +889,7 @@ def _get_W7X_poincare(R, phi, conf, symmetry):
         out, dims=(*pnc.dims[:2], "points"), coords=dict(Rz=pnc["Rz"], phi=pnc["phi"])
     )
     da.to_netcdf(fn)
-    return out
+    return da
 
 
 def plot_poincare(*args, **kw):
@@ -935,9 +954,7 @@ def get_VMEC_surfaces(phi=[0], s=0.75, w7x_run="w7x_ref_1", npoints=100):
 
 ### Return the W7X PFC as RZline objects
 def get_W7X_vessel(phi=[0], nz=256, show=False):
-    m = hashlib.md5()
-    m.update("-".join([str(x) for x in phi]).encode())
-    fn = f"w7x_vessel_{nz}_{m.hexdigest()[:10]}.cache"
+    fn = f"w7x_vessel_{nz}_{myhash(phi)}.cache"
     try:
         dat = np.loadtxt(fn)
         dat.shape = (-1, 2, dat.shape[-1])
@@ -1038,11 +1055,11 @@ def calc_curvilinear_curvature(fname, field, grid, maps):
         GZ[:, y, :] = field.Bzfunc(R, Z, y) / ((B[:, y, :]) ** 2)
         Gphi[:, y, :] = field.Byfunc(R, Z, y) / ((B[:, y, :]) ** 2)
         for x in np.arange(0, B.shape[0]):
-            dRdz[x, y, :] = calc.deriv(R[x, :]) / dz[x, y, :]
-            dZdz[x, y, :] = calc.deriv(Z[x, :]) / dz[x, y, :]
+            dRdz[x, y, :] = deriv(R[x, :]) / dz[x, y, :]
+            dZdz[x, y, :] = deriv(Z[x, :]) / dz[x, y, :]
         for z in np.arange(0, B.shape[-1]):
-            dRdx[:, y, z] = calc.deriv(R[:, z]) / dx[:, y, z]
-            dZdx[:, y, z] = calc.deriv(Z[:, z]) / dx[:, y, z]
+            dRdx[:, y, z] = deriv(R[:, z]) / dx[:, y, z]
+            dZdx[:, y, z] = deriv(Z[:, z]) / dx[:, y, z]
 
     R = f.read("R")
     Z = f.read("Z")
@@ -1065,17 +1082,17 @@ def calc_curvilinear_curvature(fname, field, grid, maps):
     dG_xdy = np.zeros(B.shape)
     for y in np.arange(0, B.shape[1]):
         for x in np.arange(0, B.shape[0]):
-            dG_ydz[x, y, :] = calc.deriv(G_y[x, y, :]) / dz[x, y, :]
-            dG_xdz[x, y, :] = calc.deriv(G_x[x, y, :]) / dz[x, y, :]
+            dG_ydz[x, y, :] = deriv(G_y[x, y, :]) / dz[x, y, :]
+            dG_xdz[x, y, :] = deriv(G_x[x, y, :]) / dz[x, y, :]
         for z in np.arange(0, B.shape[-1]):
-            dG_ydx[:, y, z] = calc.deriv(G_y[:, y, z]) / dx[:, y, z]
-            dG_zdx[:, y, z] = calc.deriv(G_z[:, y, z]) / dx[:, y, z]
+            dG_ydx[:, y, z] = deriv(G_y[:, y, z]) / dx[:, y, z]
+            dG_zdx[:, y, z] = deriv(G_z[:, y, z]) / dx[:, y, z]
 
     # this should really use the maps...
     for x in np.arange(0, B.shape[0]):
         for z in np.arange(0, B.shape[-1]):
-            dG_zdy[x, :, z] = calc.deriv(G_z[x, :, z]) / dy[x, :, z]
-            dG_xdy[x, :, z] = calc.deriv(G_x[x, :, z]) / dy[x, :, z]
+            dG_zdy[x, :, z] = deriv(G_z[x, :, z]) / dy[x, :, z]
+            dG_xdy[x, :, z] = deriv(G_x[x, :, z]) / dy[x, :, z]
 
     bxcvx = (dG_zdy - dG_ydz) / J
     bxcvy = (dG_xdz - dG_zdx) / J
@@ -1193,6 +1210,16 @@ def plot_RE_poincare(
         xcentre=xcentre, I_coil=I_coil, radius=2 * a, yperiod=yperiod
     )
     zb.plot.plot_poincare(field, start_r, start_z, yperiod, revs=npoints)
+
+
+def myhash(*args, len=10):
+    """
+    Compute a digest over some numerical data
+    """
+    m = hashlib.md5()
+    for arg in args:
+        m.update("-".join([str(x) for x in np.array([arg]).ravel()]).encode())
+    return m.hexdigest()[:len]
 
 
 def calc_iota(field, start_r, start_z):
