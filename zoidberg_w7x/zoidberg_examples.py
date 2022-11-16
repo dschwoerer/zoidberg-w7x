@@ -503,7 +503,8 @@ def W7X(
 
     with timeit("Creating maps took %f"):
         maps = zb.make_maps(grid, field, field_tracer=tracer)
-    maps["phi"] = ycoords
+    maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
+    maps["w7x_configuration_id"] = configuration
     with timeit("Writing maps took %f"):
         zb.write_maps(grid, field, maps, str(fname), metric2d=False)
 
@@ -593,7 +594,7 @@ def get_inner_outer(lines1, lines2, io):
             try:
                 pi = sg.Polygon(li)
                 assert pi.is_valid
-            except:
+            except:  # noqa
                 plt.plot(*li.T, "x-")
                 plt.figure()
                 plt.plot(li.T[0], "x-")
@@ -626,7 +627,7 @@ def get_inner_outer(lines1, lines2, io):
                 plt.show()
                 res = best
             newrz = res.exterior.coords
-        except:
+        except:  # noqa
             plt.plot(*l1.T, "x-", label="l1")
             plt.plot(*l2.T, "x-", label="l2")
             plt.legend()
