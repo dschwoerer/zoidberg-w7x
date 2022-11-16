@@ -277,6 +277,7 @@ def W7X(
     trace_web=True,
     avoid_double_outer=True,
     full_torus=False,
+    min_conn_length=3,
 ):
 
     if vmec_url is None:
@@ -308,6 +309,7 @@ def W7X(
         outer_lines = get_inner(outer_new, outer_lines)
         if show_lines:
             history_outer["vmec"] = outer_new
+
     if outer_vessel:
         print("Aligning to plasma vessel (EXPERIMENTAL) ...")
         with timeit(" ... took %f"):
@@ -418,55 +420,68 @@ def W7X(
     if avoid_double_outer:
         print("Avoid double boundary")
 
-        def trace(outer_lines):
+        def trace(outer_lines, num=1):
             m = hashlib.md5()
             m.update("-".join([str(x) for x in ycoords]).encode())
-            fn0 = fn = f"w7x_vessel_{nz}_{m.hexdigest()[:10]}"
-            fn = f"{fn0}.cache"
+            fnn = (
+                f"w7x_vessel_{nz}{f'_{num}' if num > 1 else ''}_{myhash(ycoords)}.cache"
+            )
+            fn = f"w7x_vessel_{nz}_{m.hexdigest()[:10]}.cache" if num == 1 else None
             try:
-                dat = np.loadtxt(fn)
-                dat.shape = (2, -1, 2, dat.shape[-1])
+                dat = np.loadtxt(fnn)
+                dat.shape = (2, num, nz, 2, dat.shape[-1])
                 return dat
             except:
-                print("nocache:", fn)
+                try:
+                    dat = np.loadtxt(fn)
+                    np.savetxt(fnn, dat)
+                    dat.shape = (2, num, nz, 2, dat.shape[-1])
+                    return dat
+                except:
+                    print("nocache:", fnn)
 
             dy = ycoords[1] - ycoords[0]
-            dat = [], []
-            with Pool(16) as pool:
+            dat = [[[] for _ in range(num)] for _ in range(2)]
+            with Pool(12) as pool:
                 tracerfunc = partial(
                     tracer.follow_field_lines, chunk=int(1e8), timeout=60, retry=2
                 )
                 for outer, y in zip(outer_lines, ycoords):
-                    for lst, dist in zip(dat, [dy, -dy]):
-                        lst += [
-                            pool.apply_async(
-                                tracerfunc, (outer.R, outer.Z, [y, y + dist])
-                            )
-                        ]
+                    for n in range(num):
+                        for k, dist in enumerate([dy, -dy]):
+                            dat[k][n] += [
+                                pool.apply_async(
+                                    tracerfunc,
+                                    (outer.R, outer.Z, [y, y + dist * (n + 1)]),
+                                )
+                            ]
                 k = 0
                 with zb.progress.Progress() as prog:
                     prog.update(0)
-                    for da in dat:
-                        for i in range(len(da)):
-                            da[i] = da[i].get()
-                            k += 1
-                            prog.update(k / len(da) / 2)
-            for da in dat:
-                for i in range(len(da)):
-                    da[i] = np.transpose(da[i][1])
+                    for dai in dat:
+                        for da in dai:
+                            for i in range(len(da)):
+                                da[i] = np.transpose(da[i].get()[1])
+                                k += 1
+                                prog.update(k / len(da) / 2 / len(dai))
+
             dat = np.array(dat)
             shape = dat.shape
             dat.shape = (-1, shape[-1])
-            np.savetxt(fn, dat)
+            np.savetxt(fnn, dat)
             dat.shape = shape
             return dat
 
-        fwd, bwd = trace(outer_lines)
-        fwd = np.roll(fwd, 1, axis=0)
-        bwd = np.roll(bwd, -1, axis=0)
-        union = get_outer(fwd, bwd)
-        history_outer["avoid_double"] = union
-        outer_lines = get_inner(outer_lines, union)
+        fwds, bwds = trace(outer_lines, num=min_conn_length)
+        for i in range(len(fwds)):
+            fwds[i] = np.roll(fwds[i], i + 1, axis=0)
+            bwds[i] = np.roll(bwds[i], -i - 1, axis=0)
+        for i in range(min_conn_length):
+            for j in range(min_conn_length):
+                if i + j < min_conn_length:
+                    union = get_outer(fwds[i], bwds[j])
+                    history_outer["avoid_short_{i+1}_-{j+1}"] = union
+                    outer_lines = get_inner(outer_lines, union)
 
     if show_lines:
         for i in range(ny):
