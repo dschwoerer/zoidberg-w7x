@@ -385,6 +385,36 @@ def W7X(
         if trace_web
         else None
     )
+    check_VMEC = True
+    if inner_VMEC and check_VMEC:
+        import shapely.geometry as sg
+
+        assert np.isclose(inner_lines[0].Z[0], 0)
+        tracings = get_W7X_poincare(
+            [inner_lines[0].R[0]],
+            phi=ycoords,
+            conf=configuration,
+            nz=nz,
+            symmetry=symmetry,
+        )
+        errors = []
+        for yid, vmectracing in enumerate(zip(inner_lines, tracings)):
+            vt = vmectracing
+            vmectracing = [sg.Polygon(np.array([l1.R, l1.Z]).T) for l1 in vmectracing]
+            vmec, tracing = vmectracing
+            assert vmec.is_valid
+            assert tracing.is_valid
+            error = vmec.symmetric_difference(tracing).area / vmec.area
+            errors.append(error)
+            if error > 2e-2:
+                for d, l in zip(vt, ("vmec", "tracing")):
+                    plt.plot(d.R, d.Z, "-", label=l)
+                plt.title(f"config={configuration} ; y_id={yid} ; error={error}")
+                plt.legend()
+                plt.show()
+                raise ValueError(f"Error is {error} and larger than expected.")
+        print(f"vmec vs fieldline error is {np.max(errors)*100:.4f} %")
+
     if avoid_double_outer:
         print("Avoid double boundary")
 
