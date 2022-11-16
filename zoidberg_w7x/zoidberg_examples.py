@@ -658,72 +658,62 @@ def connection_length(RZ, phi, conf, limit):
     RZ: RZ coorindates
 
     """
-    m = hashlib.md5()
-    for var in [*RZ, phi]:
-        try:
-            m.update("-".join([str(x) for x in var]).encode())
-        except TypeError:
-            m.update(str(var).encode())
-    # m.update("-".join([str(x) for x in phi]).encode())
-    fn = f"w7x_poincare_{conf}_{m.hexdigest()[:10]}.cache.nc"
+    import xarray as xr
+
+    fn = f"w7x_poincare_{conf}_{myhash(*RZ, phi)}.cache.nc"
     try:
         return xr.open_dataset(fn)
-    except:
+    except FileNotFoundError:
         print("nocache:", fn)
-    flt = get_tracer()
-    pnts = flt.types.Points3D()
+
     R, Z = RZ
-    pnts.x1 = np.ravel(R * np.cos(phi))
-    pnts.x2 = np.ravel(R * np.sin(phi))
-    pnts.x3 = np.ravel(Z)
+    dats = [np.ravel(R * np.cos(phi)), np.ravel(R * np.sin(phi)), np.ravel(Z)]
 
-    config = flt.types.MagneticConfig()
-    config.configIds = [conf]
+    chunk = 12
 
-    task = flt.types.Task()
-    task.step = 1e-2
-    con = flt.types.ConnectionLength()
-    con.limit = limit
-    con.returnLoads = False
-    task.connection = con
+    with Pool(12) as pool:
 
-    machine = flt.types.Machine(1)
-    machine.grid.numX, machine.grid.numY, machine.grid.numZ = 500, 500, 100
-    machine.grid.ZMin, machine.grid.ZMax = -1.5, 1.5
-    machine.grid.YMin, machine.grid.YMax = -7, 7
-    machine.grid.XMin, machine.grid.XMax = -7, 7
+        def start(i):
+            return pool.apply_async(
+                _connection_length,
+                (
+                    [d[i : i + chunk] for d in dats],
+                    conf,
+                    limit,
+                ),
+            )
 
-    machine.assemblyIds = [2, 5, 6, 7, 9, 15, 16, 17]  # [1]
-    task.machine = machine
+        # Start parallel calculation
+        results = [start(i) for i in range(0, len(dats[0]), chunk)]
+        # Wait for result and combine
+        done = np.zeros(len(results), dtype=bool)
+        with tqdm(total=len(done)) as pbar:
+            j = 0
+            while not np.all(done):
+                if done[j]:
+                    continue
+                try:
+                    results[j] = results[j].get(timeout=5)
+                    done[j] = True
+                    pbar.update(1)
+                except mpcontext.TimeoutError:
+                    pass
+                j += 1
+                if j == len(done):
+                    j = 0
+                elif np.sum(1 - done[:j]) > os.cpu_count():
+                    j = 0
 
-    # grid = flt.types.Grid()
-    # config.grid = grid
-    # grid.fieldSymmetry = 1
+            try:
+                results = np.concatenate(results, axis=2)
+            except ValueError:
+                print(results)
+                raise
+                # raise ValueError(
+                #     f"np.concatenate failed, shapes where {', '.join([str(x.shape) for x in results])}."
+                # )
 
-    # cyl = flt.types.CylindricalGrid()
-    # grid.cylindrical = cyl
-    # cyl.numR, cyl.numZ, cyl.numPhi = 181, 181, 481
-    # cyl.RMin, cyl.RMax, cyl.ZMin, cyl.ZMax = 4.05, 6.75, -1.35, 1.35
-
-    # machine = flt.types.Machine(1)
-    # machine.grid.numX, machine.grid.numY, machine.grid.numZ = 500, 500, 100
-    # machine.grid.ZMin, machine.grid.ZMax = -1.5, 1.5
-    # machine.grid.YMin, machine.grid.YMax = -7, 7
-    # machine.grid.XMin, machine.grid.XMax = -7, 7
-    # machine.meshedModelsIds = [164]
-    # machine.assemblyIds = [14, 8, 9, 13, 21]
-
-    out = np.empty((4, 2, R.size)) * np.nan
-    for config.inverseField in False, True:
-
-        res = flt.service.trace(pnts, config, task, machine)
-        print(res)
-        print(res.connection)
-        for i, con in enumerate(res.connection):
-            out[0, int(config.inverseField), i] = con.length
-            if con.element is not None:
-                for j, var in enumerate((con.x, con.y, con.z)):
-                    out[j + 1, int(config.inverseField), i] = var
+    out = results
 
     out.shape = (4, 2, *R.shape)
     ds = xr.Dataset()
@@ -737,6 +727,71 @@ def connection_length(RZ, phi, conf, limit):
     )
     ds.to_netcdf(fn)
     return ds
+
+
+def _connection_length(xyz, conf, limit, dir=None):
+    from time import sleep
+
+    sleep(np.random.random(1)[0] * 10)
+
+    flt = get_tracer()
+    pnts = flt.types.Points3D()
+    x, y, z = xyz
+    pnts.x1 = x
+    pnts.x2 = y
+    pnts.x3 = z
+
+    config = flt.types.MagneticConfig()
+    config.configIds = [conf]
+
+    if 0:
+        g = flt.types.Grid()
+        my_grid = flt.types.CylindricalGrid()
+
+        my_grid.RMin = 4.05
+        my_grid.RMax = 6.75
+        my_grid.ZMin = -1.35
+        my_grid.ZMax = 1.35
+        my_grid.numR = 181
+        my_grid.numZ = 181
+        my_grid.numPhi = 96
+        g.cylindrical = my_grid
+        g.fieldSymmetry = 5
+        config.grid = g
+
+    task = flt.types.Task()
+    task.step = 1e-3
+    con = flt.types.ConnectionLength()
+    con.limit = limit
+    con.returnLoads = False
+    task.connection = con
+
+    machine = flt.types.Machine(1)
+    machine.grid.numX, machine.grid.numY, machine.grid.numZ = 500, 500, 100
+    machine.grid.ZMin, machine.grid.ZMax = -1.5, 1.5
+    machine.grid.YMin, machine.grid.YMax = -7, 7
+    machine.grid.XMin, machine.grid.XMax = -7, 7
+
+    machine.assemblyIds = []  # 371]  # [2, 5, 6, 7, 9, 15, 16, 17]  # [1]
+    machine.meshedModelsIds = [371]
+    task.machine = machine
+
+    timeout = x.size * limit + 10
+    if isinstance(dir, bool):
+        dir = (dir,)
+    dir = dir or (False, True)
+    out = np.empty((4, len(dir), x.size)) * np.nan
+    for config.inverseField in dir:
+        res = flt.service.trace(
+            pnts, config, task, machine, osa_retry=5, osa_timeout=timeout
+        )
+        for i, con in enumerate(res.connection):
+            out[0, dir.index(config.inverseField), i] = con.length
+            if con.element is not None:
+                for j, var in enumerate((con.x, con.y, con.z)):
+                    out[j + 1, dir.index(config.inverseField), i] = var
+
+    return out
 
 
 def trace_boundary(fn, conf):
