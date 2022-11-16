@@ -4,14 +4,18 @@
 import hashlib
 import random
 import time
+import os
 from functools import partial
-from multiprocessing import Pool
+from multiprocessing import Pool, context as mpcontext
 
-import boututils.calculus as calc
 import matplotlib.pyplot as plt
 import numpy as np
 import zoidberg as zb
 from boututils.datafile import DataFile
+from boututils.boutarray import BoutArray
+from boututils.calculus import deriv
+
+from tqdm import tqdm
 
 
 def screwpinch(
@@ -289,7 +293,8 @@ def W7X(
             )
         vmec_url = urls[configuration]
 
-    yperiod = 2 * np.pi if full_torus else 2 * np.pi / 5.0
+    symmetry = 1 if full_torus else 5
+    yperiod = 2 * np.pi / symmetry
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
     outer_lines = None
     history_outer = {}
@@ -317,7 +322,7 @@ def W7X(
         print(f"Aligning to poincare R={R0}")
         with timeit(" ... took %f"):
             outer_new = get_W7X_poincare(
-                R0, phi=ycoords, conf=configuration, nz=nz * 10
+                R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
             )
             outer_lines = get_inner(outer_new, outer_lines)
         if show_lines:
@@ -793,8 +798,8 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
     return da
 
 
-def get_W7X_poincare(R, phi, conf, nz):
-    dat = _get_W7X_poincare(R, phi, conf)
+def get_W7X_poincare(R, phi, conf, nz, symmetry=5):
+    dat = _get_W7X_poincare(R, phi, conf, symmetry)
     out = []
     for cur in dat.transpose("phi", ...):
         cur = zb.rzline.RZline(*cur, smooth=50)
@@ -803,7 +808,7 @@ def get_W7X_poincare(R, phi, conf, nz):
     return out
 
 
-def _get_W7X_poincare(R, phi, conf):
+def _get_W7X_poincare(R, phi, conf, symmetry):
     import xarray as xr
 
     m = hashlib.md5()
@@ -815,7 +820,7 @@ def _get_W7X_poincare(R, phi, conf):
     except FileNotFoundError:
         pass
 
-    pnc = trace_poincare([R], [0], phi, 50, conf)
+    pnc = trace_poincare([R], [0], phi, 50, conf, symmetry=symmetry)
 
     def _prod(a):
         r = 1
