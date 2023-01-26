@@ -662,7 +662,9 @@ def get_tracer(_cache={}):
     from osa import Client
 
     if "tracer" not in _cache:
-        _cache["tracer"] = Client("http://esb:8280/services/FieldLineProxy?wsdl")
+        _cache["tracer"] = Client(
+            "http://esb.ipp-hgw.mpg.de:8280/services/FieldLineProxy?wsdl"
+        )
     return _cache["tracer"]
 
 
