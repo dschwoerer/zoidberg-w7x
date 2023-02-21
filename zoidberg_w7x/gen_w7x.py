@@ -2,10 +2,6 @@
 import sys
 import re
 
-try:
-    import proxy_local_12345
-except ImportError:
-    pass
 
 from . import zoidberg_examples as zbe
 from boututils.datafile import DataFile
@@ -76,6 +72,7 @@ def help(exit=0):
 
 
 def main():
+    global debug
     opts = {k: True for k in sys.argv[1:]}
     debug = opts.pop("--debug", False)
     if "--help" in opts:
