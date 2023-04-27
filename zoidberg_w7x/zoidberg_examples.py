@@ -435,11 +435,14 @@ def W7X(
                 phi=ycoords, s=inner_VMEC, npoints=nz * 2, w7x_run=vmec_url
             )
 
-    tracer = (
-        zb.fieldtracer.FieldTracerWeb(configId=configuration, stepsize=0.01, retry=100)
-        if trace_web
-        else None
-    )
+    with timeit("Getting tracer took %f"):
+        tracer = (
+            zb.fieldtracer.FieldTracerWeb(
+                configId=configuration, stepsize=0.01, retry=100
+            )
+            if trace_web
+            else None
+        )
     check_VMEC = True
     if inner_VMEC and check_VMEC:
         import shapely.geometry as sg
@@ -464,6 +467,8 @@ def W7X(
             if error > 2e-2:
                 for d, l in zip(vt, ("vmec", "tracing")):
                     plt.plot(d.R, d.Z, "-", label=l)
+                    plt.plot(d.R, -d.Z, "-", label=l + " ud")
+                plt.plot(vt[1].R, vt[1].Z, "x")
                 plt.title(f"config={configuration} ; y_id={yid} ; error={error}")
                 plt.legend()
                 plt.show()
@@ -787,7 +792,6 @@ def connection_length(RZ, phi, conf, limit):
     out.shape = (4, 2, *R.shape)
     ds = xr.Dataset()
     dims = "tracing_direction", *R.dims
-    print(out.shape, dims, len(dims), len(out.shape))
     ds["con_length"] = list(dims), out[0]
     ds["end_point"] = list(("spatial", *dims)), out[1:]
 
@@ -901,16 +905,14 @@ def trace_boundary(fn, conf):
 def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e-3):
     import xarray as xr
 
-    print(symmetry)
-
     start_r = np.array(start_r)
     start_z = np.array(start_z)
 
     assert yslices[0] == 0
     fn = f"w7x_poincare_{conf}_{myhash(start_r, start_z, yslices, [symmetry, npoints, step])}.cache.nc"
     try:
-        dat = xr.open_dataarray(fn)
-        return dat
+        with xr.open_dataarray(fn) as dat:
+            return dat
     except:
         print("nocache:", fn)
 
@@ -1085,7 +1087,6 @@ def get_W7X_vessel(phi=[0], nz=256, show=False):
         lines = [
             zb.rzline.line_from_points(*d, spline_order=1, is_sorted=True) for d in dat
         ]
-        print("using cache")
         return lines
     except:
         pass
