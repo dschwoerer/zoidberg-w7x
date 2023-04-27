@@ -4,6 +4,7 @@
 import hashlib
 import random
 import time
+import sys
 import os
 from functools import partial
 from multiprocessing import Pool, context as mpcontext
@@ -172,7 +173,6 @@ def dommaschk(
     return_iota=True,
     write_iota=False,
 ):
-
     if C is None:
         C = np.zeros((6, 5, 4))
         C[5, 2, 1] = 0.4
@@ -258,6 +258,7 @@ def W7X(
     nz=256,
     fname="W7-X.fci.nc",
     vmec_file="w7-x.wout.nc",
+    emc3_file=None,
     inner_VMEC=False,
     inner_vacuum=False,
     outer_VMEC=False,
@@ -280,7 +281,6 @@ def W7X(
     full_torus=False,
     min_conn_length=3,
 ):
-
     if vmec_url is None:
         urls = {
             # 0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref_171/wout.nc",
@@ -301,6 +301,17 @@ def W7X(
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
     outer_lines = None
     history_outer = {}
+
+    if emc3_file:
+        with timeit2("Aligning to EMC3 grid ..."):
+            if isinstance(emc3_file, bool):
+                emc3_file = "emc3.nc"
+            outer_new = get_emc3_shape(emc3_file, "outer", ycoords, nz * 10)
+            outer_lines = get_inner(outer_new, outer_lines)
+            if show_lines:
+                history_outer["emc3"] = outer_new
+            inner_lines = get_emc3_shape(emc3_file, "inner", ycoords, nz * 10)
+
     if outer_VMEC:
         print("Aligning to outer VMEC flux surface...")
         if isinstance(outer_VMEC, bool):
@@ -313,8 +324,7 @@ def W7X(
             history_outer["vmec"] = outer_new
 
     if outer_vessel:
-        print("Aligning to plasma vessel (EXPERIMENTAL) ...")
-        with timeit(" ... took %f"):
+        with timeit2("Aligning to plasma vessel (EXPERIMENTAL) ..."):
             outer_new = get_W7X_vessel(phi=ycoords, nz=nz * 10)
             outer_lines = get_inner(outer_new, outer_lines)
             assert_valid(outer_lines)
@@ -466,19 +476,17 @@ def W7X(
         def trace(outer_lines, num=1):
             m = hashlib.md5()
             m.update("-".join([str(x) for x in ycoords]).encode())
-            fnn = (
-                f"w7x_vessel_{nz}{f'_{num}' if num > 1 else ''}_{myhash(ycoords)}.cache"
-            )
+            fnn = f"w7x_vessel_{nz}{f'_{num}' if num > 1 else ''}_{myhash(ycoords, *outer_lines)}.cache"
             fn = f"w7x_vessel_{nz}_{m.hexdigest()[:10]}.cache" if num == 1 else None
             try:
                 dat = np.loadtxt(fnn)
-                dat.shape = (2, num, nz, 2, dat.shape[-1])
+                dat.shape = (2, num, len(ycoords), 2, dat.shape[-1])
                 return dat
-            except:
+            except FileNotFoundError:
                 try:
                     dat = np.loadtxt(fn)
                     np.savetxt(fnn, dat)
-                    dat.shape = (2, num, nz, 2, dat.shape[-1])
+                    dat.shape = (2, num, len(ycoords), 2, dat.shape[-1])
                     return dat
                 except:
                     print("nocache:", fnn)
@@ -523,7 +531,7 @@ def W7X(
             for j in range(min_conn_length):
                 if i + j < min_conn_length:
                     union = get_outer(fwds[i], bwds[j])
-                    history_outer["avoid_short_{i+1}_-{j+1}"] = union
+                    history_outer[f"avoid_short_{i+1}_-{j+1}"] = union
                     outer_lines = get_inner(outer_lines, union)
 
     if show_lines:
@@ -562,6 +570,7 @@ def W7X(
     with timeit("Creating maps took %f"):
         maps = zb.make_maps(grid, field, field_tracer=tracer)
     maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
+    maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["w7x_configuration_id"] = configuration
     with timeit("Writing maps took %f"):
         zb.write_maps(grid, field, maps, str(fname), metric2d=False)
@@ -1333,7 +1342,10 @@ def myhash(*args, len=10):
     """
     m = hashlib.md5()
     for arg in args:
-        m.update("-".join([str(x) for x in np.array([arg]).ravel()]).encode())
+        if isinstance(arg, zb.rzline.RZline):
+            m.update("-".join([str(x) for x in zip(arg.R, arg.Z)]).encode())
+        else:
+            m.update("-".join([str(x) for x in np.array([arg]).ravel()]).encode())
     return m.hexdigest()[:len]
 
 
@@ -1364,6 +1376,75 @@ def plot_maps(field, grid, maps, yslice=0):
     plt.plot(R_next, Z_next, "o")
 
     plt.show()
+
+
+def get_emc3_shape(fn, direction, ycoords, nz):
+    import xarray as xr
+    import xemc3
+
+    import zoidberg as zb
+    import zoidberg.rzline
+
+    import scipy
+
+    try:
+        from scipy.interpolate import make_smoothing_spline
+    except ImportError:
+        raise ImportError("scipy is too old!")
+
+    direction = dict(outer=-1, inner=+1)[direction]
+
+    with xr.open_dataset(fn) as ds:
+        pass
+
+    def myrange(a, b):
+        if a > b:
+            return range(a, b - 1, -1)
+        return range(a, b + 1)
+
+    coords = xr.Dataset({k: ds[k] for k in [f"{k}_bounds" for k in "Rz"]})
+
+    lines = []
+
+    ds = xr.Dataset({k: ds[k] for k in ["ne", "R_bounds", "z_bounds", "phi_bounds"]})
+    for phi in ycoords:
+        try:
+            ne = ds.emc3.sel(phi=phi).ne
+            zsign = +1
+        except:
+            phi = 2 * np.max(ds.phi_bounds) - phi
+            ne = ds.emc3.sel(phi=phi).ne
+            zsign = -1
+
+        rids = np.argmax(np.isfinite(ne.values[::direction]), axis=0)
+        if direction == -1:
+            rids = len(ne.r) - rids
+        # for theta
+        coords_ = coords.emc3.sel(phi=phi)
+        coords_ = xr.Dataset({k: coords_.emc3[f"{k}_corners"] for k in "Rz"})
+        coords_.z.values *= zsign
+
+        out = []
+        last = rids[-1]
+        for tid, rid in enumerate(rids):
+            for cr in myrange(last, rid):
+                out.append((tid, cr))
+            last = rid
+        out = np.array(out).T
+        out_ = [xr.DataArray(o, dims="index") for o in out]
+        c__ = coords_.isel(theta=out_[0], r=out_[1])
+        rz = [c__[k].values for k in "Rz"]
+
+        spl = []
+        for k in rz:
+            lk = len(k)
+            lke = lk + 10
+            theta = np.linspace(0, np.pi * 2 * ((lke - 1) / lk), lke)
+            k2 = np.linspace(0, np.pi * 2, nz) + np.pi / lk * (lke - lk)
+            spl.append(make_smoothing_spline(theta, np.hstack((k, k[: lke - lk])))(k2))
+
+        lines.append(zb.rzline.RZline(*spl))
+    return lines
 
 
 class timeit(object):
