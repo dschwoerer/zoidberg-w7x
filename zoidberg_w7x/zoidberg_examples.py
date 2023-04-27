@@ -418,9 +418,11 @@ def W7X(
 
     if inner_VMEC:
         print("Aligning to inner VMEC flux surface...")
+        if inner_VMEC is True:
+            inner_VMEC = 0.67
         with timeit(" ... took %f"):
             inner_lines = get_VMEC_surfaces(
-                phi=ycoords, s=0.67, npoints=nz * 2, w7x_run=vmec_url
+                phi=ycoords, s=inner_VMEC, npoints=nz * 2, w7x_run=vmec_url
             )
 
     tracer = (
