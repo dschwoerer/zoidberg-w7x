@@ -264,6 +264,7 @@ def W7X(
     outer_vacuum=False,
     outer_vessel=False,
     outer_poincare=False,
+    outer_islands=False,
     npoints=100,
     a=2.5,
     show_maps=False,
@@ -331,7 +332,46 @@ def W7X(
         if show_lines:
             history_outer["poincare"] = outer_new
 
-    elif outer_vacuum or inner_vacuum:
+    if outer_islands:
+        import shapely.geometry as sg
+        import shapely
+
+        if outer_islands is True:
+            outer_islands = 0.1
+        R0 = {0: [5.698742375633017 - 1e-4]}[configuration]
+        with timeit2("tracing islands for poincare"):
+            islands = trace_poincare([R0], [0], ycoords, 200, configuration, symmetry)
+            # islands = _get_W7X_poincare(
+            #     R0,
+            #     phi=ycoords,
+            #     conf=configuration,
+            #     symmetry=symmetry,
+            # )
+        print(f"calculating islands shape", end="")
+        sys.stdout.flush()
+        with timeit(" ... took %f"):
+            outer_new = []
+            for yid, island in enumerate(islands.transpose("phi", ...)):
+                island = island.transpose(..., "Rz")
+                island_data = island.values
+                island_data.shape = (-1, 2)
+                extend = outer_islands
+                if extend < 0.1:
+                    extend = 0.1
+                points = [sg.Point(*i).buffer(extend) for i in island_data]
+                xy = shapely.union_all(points)
+                if outer_islands < extend:
+                    xy = xy.buffer(outer_islands - extend)
+                xy = xy.exterior.xy
+                cur = zb.rzline.RZline(*xy, smooth=50)
+                cur = cur.equallySpaced(n=nz * 10)
+                outer_new.append(cur)
+            outer_lines = get_inner(outer_new, outer_lines)
+            assert_valid(outer_lines)
+            if show_lines:
+                history_outer["island"] = outer_new
+
+    if outer_vacuum or inner_vacuum:
         xmin = 4.05
         xmax = 4.05 + 2.5
         zmin = -1.35
