@@ -1333,3 +1333,11 @@ class timeit(object):
 
     def __exit__(self, *args):
         print(self.info % (time.time() - self.t0))
+
+
+class timeit2(timeit):
+    def __init__(self, info):
+        print(info, end="")
+        sys.stdout.flush()
+        self.info = " ... took %f"
+
