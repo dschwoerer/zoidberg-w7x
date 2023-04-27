@@ -6,7 +6,6 @@ import re
 from . import zoidberg_examples as zbe
 from boututils.datafile import DataFile
 import zoidberg
-
 from . import version, soft_name
 
 # conf          name
@@ -24,9 +23,6 @@ def gen(conf, shape, fn, **kw):
     with zbe.timeit():
         zbe.W7X(
             *shape,
-            outer_vessel=True,
-            inner_VMEC=True,
-            outer_VMEC=True,
             configuration=conf,
             calc_curvature=True,
             show_lines=debug,
@@ -42,23 +38,60 @@ def gen(conf, shape, fn, **kw):
 
 
 def gen2(fn):
-    args = re.findall(r"W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci", fn)
+    args = re.match(r"^W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$", fn)
     if not args:
         print(f"'{fn}' is not a valid filename")
         return
 
-    assert len(args) == 1
-    args = [int(x) for x in args[0][:4]] + list(args[0][4:])
+    args = args.groups()
+    args = [int(x) for x in args[:4]] + list(args[4:])
     conf = args[0]
     shape = args[1:4]
     known_opts = dict(
-        full=dict(full_torus=True),
+        full="full_torus",
+        outer="outer_VMEC",
+        island="outer_islands",
+        vessel="outer_vessel",
+        inner="inner_VMEC",
+        emc3="emc3_file",
     )
-    kw = {}
+    kw = dict(
+        outer_VMEC=False,
+        outer_islands=True,
+        outer_vessel=True,
+        inner_VMEC=True,
+    )
+    print(args[4:])
     for opt in args[4].split("."):
+        print(opt)
         if not opt:
             continue
-        kw.update(known_opts[opt])
+        if "=" in opt or ":" in opt:
+            if "=" in opt:
+                opt, val = opt.split("=")
+            else:
+                opt, val = opt.split(":")
+
+            try:
+                val = float(val)
+            except ValueError:
+                try:
+                    val = {
+                        "True": True,
+                        "T": True,
+                        "t": True,
+                        "False": False,
+                        "F": False,
+                        "f": False,
+                    }[val]
+                except KeyError:
+                    pass
+            else:
+                if abs(val - int(val)) < 1e-6:
+                    val = int(val)
+        else:
+            val = True
+        kw[known_opts[opt]] = val
     print(kw)
     gen(conf, shape, fn, field_refine=0, **kw)
 
