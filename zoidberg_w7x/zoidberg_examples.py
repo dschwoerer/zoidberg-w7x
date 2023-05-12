@@ -532,6 +532,9 @@ def W7X(
         for i in range(len(fwds)):
             fwds[i] = np.roll(fwds[i], i + 1, axis=0)
             bwds[i] = np.roll(bwds[i], -i - 1, axis=0)
+        assert_valid(fwds)
+        assert_valid(bwds)
+
         for i in range(min_conn_length):
             for j in range(min_conn_length):
                 if i + j < min_conn_length:
@@ -620,18 +623,26 @@ def assert_valid(line):
     else:
         x = line.R
         y = line.Z
+    import shapely.geometry as sg
+
+    pi = sg.Polygon(np.array((x, y)).T)
+    if pi.is_valid:
+        return
     dx = x - np.roll(x, 1)
     dy = y - np.roll(y, 1)
     dr = dx**2 + dy**2
     bad = dr == 0
-    if not np.any(bad):
-        return
-    print(np.sum(bad))
+    # if not np.any(bad):
+    #     return
+    # print(np.sum(bad))
     print(np.arange(len(bad))[bad])
-    plt.plot(x - 5)
-    plt.plot(y)
-    plt.plot(dx * 1000)
-    plt.plot(dy * 1000)
+    plt.plot(np.roll(x - 5, 10), label="R - 5")
+    plt.plot(np.roll(y, 10), label="z")
+    plt.plot(dx * 1000, label="dR")
+    plt.plot(dy * 1000, label="dz")
+    plt.plot((dx**2 + dy**2) * 1e6, label="ds²")
+    plt.legend()
+
     plt.figure()
     plt.plot(x, y, "x-")
     plt.show()
