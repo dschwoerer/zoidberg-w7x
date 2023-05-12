@@ -1395,7 +1395,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     import xemc3
 
     import zoidberg as zb
-    import zoidberg.rzline
+    from zoidberg.smooth import smooth
 
     import scipy
 
@@ -1428,7 +1428,11 @@ def get_emc3_shape(fn, direction, ycoords, nz):
             ne = ds.emc3.sel(phi=phi).ne
             zsign = -1
 
-        rids = np.argmax(np.isfinite(ne.values[::direction]), axis=0)
+        # rids = np.argmax(np.isfinite(ne.values[::direction]), axis=0)
+        rids = np.argmax(ne.values[::direction] > 0, axis=0)
+        if np.max(rids) == 0:
+            print(phi, zsign)
+        print(np.min(rids), np.max(rids))
         if direction == -1:
             rids = len(ne.r) - rids
         # for theta
@@ -1447,15 +1451,39 @@ def get_emc3_shape(fn, direction, ycoords, nz):
         c__ = coords_.isel(theta=out_[0], r=out_[1])
         rz = [c__[k].values for k in "Rz"]
 
-        spl = []
-        for k in rz:
-            lk = len(k)
-            lke = lk + 10
-            theta = np.linspace(0, np.pi * 2 * ((lke - 1) / lk), lke)
-            k2 = np.linspace(0, np.pi * 2, nz) + np.pi / lk * (lke - lk)
-            spl.append(make_smoothing_spline(theta, np.hstack((k, k[: lke - lk])))(k2))
+        def get_new_theta(rz, rev=False):
+            drz = [x - np.roll(x, 1) for x in rz]
+            ids = [np.sqrt(a**2 + b**2) for a, b in zip(*drz)]
+            if rev:
+                ids = 1 / np.array(ids)
+            knew = np.cumsum(ids)
+            knew *= np.pi * 2 / knew[-1]
+            knew -= knew[0]
+            return knew
 
-        lines.append(zb.rzline.RZline(*spl))
+        spl = []
+        lk = len(rz[0])
+        lke = lk + 10
+        # theta = np.linspace(0, np.pi * 2 * ((lke - 1) / lk), lke)
+        theta = get_new_theta(rz)
+        theta = np.hstack((theta, theta[: lke - lk] + np.pi * 2))
+        k2 = np.linspace(0, np.pi * 2, nz, endpoint=False) + np.pi / lk * (lke - lk)
+        splines = [
+            make_smoothing_spline(theta, np.hstack((k, k[: lke - lk]))) for k in rz
+        ]
+        spl = [spl(k2) for spl in splines]
+        # spl = [spl(knew) for spl in splines]
+
+        assert_valid(np.array(spl))
+        splnew = smooth(*spl, bounds=max(nz // 100, 2), plot=False)
+        try:
+            assert_valid(np.array(splnew))
+        except:
+            splnew = smooth(*spl, bounds=max(nz // 100, 2), plot=True)
+            raise
+        spl = splnew
+        lines.append(zb.rzline.RZline(*spl, spline_order=True))
+        assert_valid(lines[-1])
     return lines
 
 
