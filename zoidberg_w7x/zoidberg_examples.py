@@ -806,12 +806,20 @@ def connection_length(RZ, phi, conf, limit):
 
     out.shape = (4, 2, *R.shape)
     ds = xr.Dataset()
-    dims = "tracing_direction", *R.dims
+    dims = ("tracing_direction",)
+    try:
+        dims = *dims, *R.dims
+    except AttributeError:
+        dims = *dims, *[f"dim_{d}" for d in range(len(R.shape))]
     ds["con_length"] = list(dims), out[0]
     ds["end_point"] = list(("spatial", *dims)), out[1:]
 
+    try:
+        coords = R.coords
+    except AttributeError:
+        coords = {}
     ds = ds.assign_coords(
-        tracing_direction=["forward", "backwards"], spatial=list("xyz"), **R.coords
+        tracing_direction=["forward", "backwards"], spatial=list("xyz"), **coords
     )
     ds.to_netcdf(fn)
     return ds
