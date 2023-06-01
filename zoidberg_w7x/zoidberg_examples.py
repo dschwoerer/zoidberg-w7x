@@ -1169,13 +1169,14 @@ def calc_curvilinear_curvature(fname, field, grid, maps):
     f = DataFile(str(fname), write=True)
     B = f.read("B")
 
-    dx = grid.metric()["dx"]
-    dz = grid.metric()["dz"]
-    g_11 = grid.metric()["g_xx"]
-    g_22 = grid.metric()["g_yy"]
-    g_33 = grid.metric()["g_zz"]
+    metric = grid.metric()
+    dx = metric["dx"]
+    dz = metric["dz"]
+    g_11 = metric["g_xx"]
+    g_22 = metric["g_yy"]
+    g_33 = metric["g_zz"]
     g_12 = 0.0
-    g_13 = grid.metric()["g_xz"]
+    g_13 = metric["g_xz"]
     g_23 = 0.0
 
     GR = np.zeros(B.shape)
