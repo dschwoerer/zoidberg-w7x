@@ -758,7 +758,7 @@ def connection_length(RZ, phi, conf, limit):
     R, Z = RZ
     dats = [np.ravel(R * np.cos(phi)), np.ravel(R * np.sin(phi)), np.ravel(Z)]
 
-    chunk = 12
+    chunk = max(12, int(30 / limit))
 
     with Pool(12) as pool:
 
