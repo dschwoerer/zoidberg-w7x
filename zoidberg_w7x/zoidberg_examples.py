@@ -303,7 +303,7 @@ def W7X(
     history_outer = {}
 
     if emc3_file:
-        with timeit2("Aligning to EMC3 grid ..."):
+        with timeit2("Aligning to EMC3 grid"):
             if isinstance(emc3_file, bool):
                 emc3_file = "emc3.nc"
             outer_new = get_emc3_shape(emc3_file, "outer", ycoords, nz * 10)
@@ -333,8 +333,7 @@ def W7X(
 
     if outer_poincare:
         R0 = {0: 6.3, 4: 6.17}[configuration]
-        print(f"Aligning to poincare R={R0}")
-        with timeit(" ... took %f"):
+        with timeit2(f"Aligning to poincare R={R0}"):
             outer_new = get_W7X_poincare(
                 R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
             )
@@ -357,9 +356,7 @@ def W7X(
             #     conf=configuration,
             #     symmetry=symmetry,
             # )
-        print(f"calculating islands shape", end="")
-        sys.stdout.flush()
-        with timeit(" ... took %f"):
+        with timeit2(f"calculating islands shape"):
             outer_new = []
             for yid, island in enumerate(islands.transpose("phi", ...)):
                 island = island.transpose(..., "Rz")
@@ -413,7 +410,7 @@ def W7X(
     zmin = np.min([min(outer_lines[i].Z) for i in range(ny)])
     zmax = np.max([max(outer_lines[i].Z) for i in range(ny)])
 
-    with timeit("Creating a field took %f"):
+    with timeit2("Creating a field"):
         if field_refine:
             field = zb.field.W7X_vacuum(
                 *[x * field_refine for x in (128, 32, 128)],
@@ -427,15 +424,14 @@ def W7X(
             field = zb.field.W7X_vacuum_on_demand(configuration)
 
     if inner_VMEC:
-        print("Aligning to inner VMEC flux surface...")
-        if inner_VMEC is True:
-            inner_VMEC = 0.67
-        with timeit(" ... took %f"):
+        with timeit2("Aligning to inner VMEC flux surface"):
+            if inner_VMEC is True:
+                inner_VMEC = 0.67
             inner_lines = get_VMEC_surfaces(
                 phi=ycoords, s=inner_VMEC, npoints=nz * 2, w7x_run=vmec_url
             )
 
-    with timeit("Getting tracer took %f"):
+    with timeit2("Getting tracer took"):
         tracer = (
             zb.fieldtracer.FieldTracerWeb(
                 configId=configuration, stepsize=0.01, retry=100
@@ -562,8 +558,7 @@ def W7X(
             plt.title(f"{i} phi={ycoords[i]}")
         plt.show()
 
-    print("creating grid...")
-    with timeit("Creating poloidal grids took %f"):
+    with timeit2("Creating poloidal grids"):
         poloidal_grid = [
             zb.poloidal_grid.grid_elliptic(
                 inner, outer, nx, nz, show=show_maps, nx_outer=2
@@ -572,10 +567,13 @@ def W7X(
         ]
 
     # Create the 3D grid by putting together 2D poloidal grids
-    with timeit("Creating a grid took %f"):
+    with timeit2("Creating a grid"):
         grid = zb.grid.Grid(poloidal_grid, ycoords, yperiod, yperiodic=True)
 
-    with timeit("Creating maps took %f"):
+    with timeit2("Calculating metric terms"):
+        grid.metric()
+
+    with timeit2("Creating maps"):
         maps = zb.make_maps(grid, field, field_tracer=tracer)
     maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
