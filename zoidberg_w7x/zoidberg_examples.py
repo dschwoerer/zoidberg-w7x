@@ -1475,13 +1475,18 @@ def get_emc3_shape(fn, direction, ycoords, nz):
         # spl = [spl(knew) for spl in splines]
 
         assert_valid(np.array(spl))
-        splnew = smooth(*spl, bounds=max(nz // 100, 2), plot=False)
-        try:
-            assert_valid(np.array(splnew))
-        except:
-            splnew = smooth(*spl, bounds=max(nz // 100, 2), plot=True)
-            raise
-        spl = splnew
+        bounds = nz // 100
+        if bounds < 2:
+            bounds = 2
+        while bounds > 1:
+            splnew = smooth(*spl, bounds=bounds, plot=False)
+            try:
+                assert_valid(np.array(splnew))
+            except:
+                splnew = smooth(*spl, bounds=bounds, plot=True)
+                raise
+            spl = splnew
+            bounds //= 2
         lines.append(zb.rzline.RZline(*spl, spline_order=True))
         assert_valid(lines[-1])
     return lines
