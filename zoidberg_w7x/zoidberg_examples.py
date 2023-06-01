@@ -995,7 +995,7 @@ def get_W7X_poincare(R, phi, conf, nz, symmetry=5):
     dat = _get_W7X_poincare(R, phi, conf, symmetry)
     out = []
     for cur in dat.transpose("phi", ...):
-        cur = zb.rzline.RZline(*cur, smooth=50)
+        cur = zb.rzline.RZline(*cur)
         cur = cur.equallySpaced(n=nz)
         out.append(cur)
     return out
