@@ -270,7 +270,7 @@ def W7X(
     a=2.5,
     show_maps=False,
     show_lines=False,
-    calc_curvature=True,
+    calc_curvature=False,
     smooth_curvature=False,
     plasma_field=False,
     configuration=0,
@@ -1432,7 +1432,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
         rids = np.argmax(ne.values[::direction] > 0, axis=0)
         if np.max(rids) == 0:
             print(phi, zsign)
-        print(np.min(rids), np.max(rids))
+            print(np.min(rids), np.max(rids))
         if direction == -1:
             rids = len(ne.r) - rids
         # for theta

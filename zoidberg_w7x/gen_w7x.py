@@ -24,7 +24,7 @@ def gen(conf, shape, fn, **kw):
         zbe.W7X(
             *shape,
             configuration=conf,
-            calc_curvature=True,
+            calc_curvature=False,
             show_lines=debug,
             show_maps=debug,
             fname=fn,
