@@ -676,15 +676,21 @@ def get_inner_outer(lines1, lines2, io):
                 pi = sg.Polygon(li)
                 assert pi.is_valid
             except:  # noqa
-                plt.plot(*li.T, "x-")
+                li0 = l10 if np.all(li == l1) else l20
+                plt.plot(*li0.T, "x-", label="input")
+                plt.plot(*li.T, "x-", label="used")
+                plt.legend()
+                plt.title("line")
                 plt.figure()
                 plt.plot(li.T[0], "x-")
                 plt.plot(li.T[1], "o-")
+                plt.title("R and z components")
                 x, y = li.T
                 dx = x - np.roll(x, 1)
                 dy = y - np.roll(y, 1)
                 plt.figure()
                 plt.scatter(dx, dy)
+                plt.title("dR and dz components")
                 plt.show()
                 raise
             ps.append(pi)
