@@ -18,16 +18,21 @@ from . import version, soft_name
 debug = False
 
 
-def gen(conf, shape, fn, **kw):
+def gen(conf, shape, fn, return_args=False, **kw):
     print(fn)
     with zbe.timeit():
-        zbe.W7X(
-            *shape,
+        kw1 = dict(
             configuration=conf,
             calc_curvature=False,
             show_lines=debug,
             show_maps=debug,
             fname=fn,
+        )
+        if return_args:
+            return shape, kw1, kw
+        zbe.W7X(
+            *shape,
+            **kw1,
             **kw,
         )
         with DataFile(fn, write=True) as f:
@@ -37,7 +42,7 @@ def gen(conf, shape, fn, **kw):
             f.write_file_attribute("software_version", version)
 
 
-def gen2(fn):
+def gen2(fn, return_args=False):
     args = re.match(r"^W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$", fn)
     if not args:
         print(f"'{fn}' is not a valid filename")
@@ -93,7 +98,7 @@ def gen2(fn):
             val = True
         kw[known_opts[opt]] = val
     print(kw)
-    gen(conf, shape, fn, field_refine=0, **kw)
+    return gen(conf, shape, fn, field_refine=0, return_args=return_args, **kw)
 
 
 def help(exit=0):
