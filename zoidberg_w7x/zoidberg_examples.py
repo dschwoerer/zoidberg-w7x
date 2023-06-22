@@ -1590,6 +1590,6 @@ class timeit2(timeit):
     def __init__(self, info):
         print(info, end="")
         sys.stdout.flush()
-        self.info = " ... %s in %f s"
+        self.info = f"\r{info} ... %s in %f s"
 
 
