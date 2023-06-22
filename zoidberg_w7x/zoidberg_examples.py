@@ -1575,12 +1575,21 @@ class timeit(object):
         self.t0 = time.time()
 
     def __exit__(self, *args):
-        print(self.info % (time.time() - self.t0))
+        diff = time.time() - self.t0
+        if args == (None, None, None):
+            state = "succeeded"
+        else:
+            state = str(args)
+        if "%s" in self.info:
+            print(self.info % (state, diff))
+        else:
+            print(self.info % (diff))
 
 
 class timeit2(timeit):
     def __init__(self, info):
         print(info, end="")
         sys.stdout.flush()
-        self.info = " ... took %f"
+        self.info = " ... %s in %f s"
+
 
