@@ -280,6 +280,8 @@ def W7X(
     avoid_double_outer=True,
     full_torus=False,
     min_conn_length=3,
+    return_lines=False,
+    return_poloidal_grid=False,
 ):
     if vmec_url is None:
         urls = {
@@ -558,6 +560,8 @@ def W7X(
             plt.title(f"{i} phi={ycoords[i]}")
         plt.show()
 
+    if return_lines:
+        return inner_lines, outer_lines
     with timeit2("Creating poloidal grids"):
         poloidal_grid = [
             zb.poloidal_grid.grid_elliptic(
@@ -565,6 +569,9 @@ def W7X(
             )
             for inner, outer in zip(inner_lines, outer_lines)
         ]
+
+    if return_poloidal_grid:
+        return poloidal_grid
 
     # Create the 3D grid by putting together 2D poloidal grids
     with timeit2("Creating a grid"):
