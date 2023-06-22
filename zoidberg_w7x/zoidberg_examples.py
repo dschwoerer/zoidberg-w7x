@@ -15,7 +15,7 @@ import zoidberg as zb
 from boututils.datafile import DataFile
 from boututils.boutarray import BoutArray
 from boututils.calculus import deriv
-
+from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 
@@ -280,6 +280,7 @@ def W7X(
     avoid_double_outer=True,
     full_torus=False,
     min_conn_length=3,
+    redistribute=0,
     return_lines=False,
     return_poloidal_grid=False,
 ):
@@ -572,6 +573,60 @@ def W7X(
 
     if return_poloidal_grid:
         return poloidal_grid
+
+    if redistribute:
+
+        def getWeights(Vi, n):
+            med = np.median(Vi)
+            Vi[Vi < med] = med
+            t1 = np.linspace(0, 1, len(Vi) + 1)
+            return interp1d(t1, np.append(Vi, Vi[0]), assume_sorted=True)(
+                np.linspace(0, 1, n, endpoint=False)
+            )
+
+        def doredistribute(loi, pmi, ind=-3):
+            RZ1 = np.array((loi.R, loi.Z))
+            RZ2 = np.array((pmi.R, pmi.Z))[:, ind]
+            drz = (RZ1[..., None] - RZ2[:, None, :]) ** 2
+            drz = np.sum(drz, axis=0)
+            lr1 = RZ1.shape[1]
+            lr2 = RZ2.shape[1]
+            fac = lr1 / lr2
+            j = np.arange(lr2, dtype=int)
+            sums = [
+                np.sum(drz[np.round(j * fac).astype(int) - i, j]) for i in range(lr1)
+            ]
+            nind = -np.argmin(sums)
+            if sums[-nind] > 10:
+                print("plotting")
+                plt.figure()
+                plt.plot(sums)
+                plt.plot([-nind, -nind], plt.ylim())
+                plt.show()
+                assert (
+                    False
+                ), "Expected to find a minimum close to zero, but failed to do so"
+            m = pmi.metric()
+            V = m["J"] * m["dx"] * m["dz"]
+            weights = getWeights(V[ind], len(loi.R))
+            lne = loi.equallySpaced(weights=np.roll(weights ** (redistribute), nind))
+            return lne
+
+        with timeit2(f"Minimising grid cells variation with exponent {redistribute}"):
+            inner_lines = [
+                doredistribute(*a, 0) for a in zip(inner_lines, poloidal_grid)
+            ]
+            outer_lines = [
+                doredistribute(*a, -3) for a in zip(outer_lines, poloidal_grid)
+            ]
+
+        with timeit2("Creating poloidal grids"):
+            poloidal_grid = [
+                zb.poloidal_grid.grid_elliptic(
+                    inner, outer, nx, nz, show=show_maps, nx_outer=2
+                )
+                for inner, outer in zip(inner_lines, outer_lines)
+            ]
 
     # Create the 3D grid by putting together 2D poloidal grids
     with timeit2("Creating a grid"):

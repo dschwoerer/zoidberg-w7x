@@ -59,6 +59,7 @@ def gen2(fn, return_args=False):
         vessel="outer_vessel",
         inner="inner_VMEC",
         emc3="emc3_file",
+        redist="redistribute",
     )
     kw = dict(
         outer_VMEC=False,
