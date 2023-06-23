@@ -510,15 +510,12 @@ def W7X(
                                     (outer.R, outer.Z, [y, y + dist * (n + 1)]),
                                 )
                             ]
-                k = 0
-                with zb.progress.Progress() as prog:
-                    prog.update(0)
+                with tqdm(total=len(dat) * 2 * len(dat)0]), desc="Tracing") as prog:
                     for dai in dat:
                         for da in dai:
                             for i in range(len(da)):
                                 da[i] = np.transpose(da[i].get()[1])
-                                k += 1
-                                prog.update(k / len(da) / 2 / len(dai))
+                                prog.update()
 
             dat = np.array(dat)
             shape = dat.shape
