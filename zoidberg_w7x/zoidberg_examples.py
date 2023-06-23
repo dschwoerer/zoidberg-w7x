@@ -16,7 +16,7 @@ from boututils.datafile import DataFile
 from boututils.boutarray import BoutArray
 from boututils.calculus import deriv
 from scipy.interpolate import interp1d
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 def screwpinch(
