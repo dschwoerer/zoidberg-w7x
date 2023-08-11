@@ -1563,7 +1563,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
         # spl = [spl(knew) for spl in splines]
 
         assert_valid(np.array(spl))
-        bounds = nz // 100
+        bounds = nz // 50
         if bounds < 2:
             bounds = 2
         while bounds > 1:
