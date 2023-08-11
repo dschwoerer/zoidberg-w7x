@@ -920,7 +920,7 @@ def _connection_length(xyz, conf, limit, dir=None):
         config.grid = g
 
     task = flt.types.Task()
-    task.step = 1e-3
+    task.step = 1e-2
     con = flt.types.ConnectionLength()
     con.limit = limit
     con.returnLoads = False
@@ -989,7 +989,7 @@ def trace_boundary(fn, conf):
         return
 
 
-def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e-3):
+def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e-2):
     import xarray as xr
 
     start_r = np.array(start_r)
