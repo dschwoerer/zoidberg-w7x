@@ -1469,9 +1469,19 @@ def plot_maps(field, grid, maps, yslice=0):
 
 def get_emc3_shape(fn, direction, ycoords, nz):
     import xarray as xr
+    import zoidberg as zb
+
+    fnc = f"w7x_{fn}_{direction}_{myhash(ycoords, nz)}.cache.nc"
+    try:
+        with xr.open_dataarray(fnc) as da:
+            pass
+        return [zb.rzline.RZline(*cur, spline_order=True) for cur in da]
+
+    except FileNotFoundError:
+        pass
+
     import xemc3
 
-    import zoidberg as zb
     from zoidberg.smooth import smooth
 
     import scipy
@@ -1496,6 +1506,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     lines = []
 
     ds = xr.Dataset({k: ds[k] for k in ["ne", "R_bounds", "z_bounds", "phi_bounds"]})
+    points = []
     for phi in ycoords:
         try:
             ne = ds.emc3.sel(phi=phi).ne
@@ -1564,8 +1575,13 @@ def get_emc3_shape(fn, direction, ycoords, nz):
                 raise
             spl = splnew
             bounds //= 2
-        lines.append(zb.rzline.RZline(*spl, spline_order=True))
+        points.append(spl)
+    lines = [zb.rzline.RZline(*spl, spline_order=True) for spl in points]
+    for line in lines:
         assert_valid(lines[-1])
+
+    xr.DataArray(np.array(points), dims=("phi", "Rz", "theta")).to_netcdf(fnc)
+
     return lines
 
 
