@@ -513,7 +513,9 @@ def W7X(
                                     (outer.R, outer.Z, [y, y + dist * (n + 1)]),
                                 )
                             ]
-                with tqdm(total=len(dat) * 2 * len(dat[0]), desc="Tracing") as prog:
+                with tqdm(
+                    total=len(dat) * len(dat[0][0]) * len(dat[0]), desc="Tracing4DB"
+                ) as prog:
                     for dai in dat:
                         for da in dai:
                             for i in range(len(da)):
