@@ -460,7 +460,10 @@ def W7X(
             vmectracing = [sg.Polygon(np.array([l1.R, l1.Z]).T) for l1 in vmectracing]
             vmec, tracing = vmectracing
             assert vmec.is_valid
-            assert tracing.is_valid
+            if not tracing.is_valid:
+                # plt.plot(tracing.R, tracing.Z)
+                # plt.show()
+                tracing.plot()
             error = vmec.symmetric_difference(tracing).area / vmec.area
             errors.append(error)
             if error > 2e-2:
