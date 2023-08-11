@@ -12,11 +12,14 @@ from boututils.datafile import DataFile
 from scipy.optimize import least_squares as leastsq
 from tqdm.auto import tqdm
 from tqdm.contrib import itertools
+from multiprocessing import Pool
 
 no4 = np.array([0, 1, 2, 3, 5, 6, 7, 8])
 nearlyeye = np.eye(9)[no4]
 nearlyeye[:, 4] -= 1
-
+sign0 = np.ones(9)
+sign0[4] = -1
+sign0 *= 1e4
 tot = 0
 totals = 0
 
@@ -70,9 +73,11 @@ def genMatrix(x):
 
     j2s = list(itertools.product(range(n2), range(n2), disable=True))
     print(j2s)
+    prog = tqdm(desc=f"Generating [{tot:2d}/{totals}]", total=n**2)
     for i in range(n):
         for j1, j2 in enumerate(j2s):
             A[..., i, j1] = taylor(x[i], np.array(j2)[slc])
+            prog.update()
     return A
 
 
@@ -151,7 +156,7 @@ def getFull(x0, axis=0):
     return np.concatenate(tmp, axis=axis)
 
 
-def errfunc(x0, B, target, fac):
+def errFunc(x0, B, target, fac):
     x = getFull(x0)
     return np.hstack((np.dot(x, B) - target, x * fac))
 
@@ -177,69 +182,138 @@ def Stencil(facs, ijk, func):
     return np.sum(func[ijkp] * facs.reshape(3, 3))
 
 
+v31 = [1, 4, 7]
+
+
+def getv3(x):
+    return np.array(
+        (
+            np.sum(x[1::3]) + 1,
+            np.sum(x[3:6]) + 1,
+            -(np.sum(x[::2] - np.sum(x[1::2]))) + 1,
+            # -(np.sum(x[3:6]) - np.sum(x[:3]) - np.sum(x[6:])) + 0.1,
+        )
+    )
+
+
 def errFunc2(x, B, target, sign):
     v2 = x * sign
-    v2[v2 > 0] = 0
-    return np.hstack((np.dot(x, B) - target, v2))
+    v2[v2 > 0] /= 1e6
+    v3 = getv3(x)
+    v3[v3 < 0] = 0
+    return np.hstack((np.dot(x, B) - target, v2, v3))
+
+
+v30 = np.zeros((9, 3))
+v30[1::3, 0] = 1
+v30[3:5, 1] = 1
+v30[:, 2] = -1
+v30[1::2, 2] = 1
+# v30[:, 3] = 1
+# v30[3:6, 3] = -1
+v30 = v30.T
 
 
 def jac2(x, B, t, sign):
-    v2 = sign * x
+    # v2 = sign * x
     v2 = sign.copy()
-    v2[sign * x > 0] = 0
+    v2[sign * x > 0] = 0  # /= 1e6
     v2 = np.diag(v2)
-    return np.vstack((B.T, v2))
+    v3 = v30.copy()
+    v3[getv3(x) < 0] = 0
+    return np.vstack((B.T, v2, v3))
 
 
-cartesian = False
-if cartesian:
-    # Jacobian is unitiy
-    testfuncs = [
-        (
-            lambda x, y: np.sin(x),
-            lambda x, y: np.sin(-x),
-        ),
-        (
-            lambda x, y: np.sin(y),
-            lambda x, y: np.sin(-y),
-        ),
-        (
-            lambda x, y: np.sin(x + y),
-            lambda x, y: 2 * np.sin(-x - y),
-        ),
-        (
-            lambda x, y: np.sin(x - y),
-            lambda x, y: 2 * np.sin(-x + y),
-        ),
-    ]
-else:
-    # Jacobian is x
-    testfuncs = [
-        (
-            lambda x, y: np.sin(x),
-            lambda x, y: -np.sin(x) + np.cos(x) / x,
-        ),
-        (
-            lambda x, y: np.cos(x),
-            lambda x, y: -np.cos(x) - np.sin(x) / x,
-        ),
-        (
-            lambda x, y: np.sin(y),
-            lambda x, y: np.sin(-y),
-        ),
-        (
-            lambda x, y: np.sin(x + y),
-            lambda x, y: -2 * np.sin(x + y) + np.cos(x + y) / x,
-        ),
-        (
-            lambda x, y: np.sin(x - y),
-            lambda x, y: -2 * np.sin(x - y) + np.cos(x - y) / x,
-        ),
-    ]
+testfuncs = {}
+testfuncs["delp2_cartesian"] = [
+    (
+        lambda x, y: np.sin(x),
+        lambda x, y: np.sin(-x),
+    ),
+    (
+        lambda x, y: np.sin(y),
+        lambda x, y: np.sin(-y),
+    ),
+    (
+        lambda x, y: np.sin(x + y),
+        lambda x, y: 2 * np.sin(-x - y),
+    ),
+    (
+        lambda x, y: np.sin(x - y),
+        lambda x, y: 2 * np.sin(-x + y),
+    ),
+]
+# Jacobian is x
+testfuncs["delp2"] = [
+    (
+        lambda x, y: np.sin(x),
+        lambda x, y: -np.sin(x) + np.cos(x) / x,
+    ),
+    (
+        lambda x, y: np.cos(x),
+        lambda x, y: -np.cos(x) - np.sin(x) / x,
+    ),
+    (
+        lambda x, y: np.sin(y),
+        lambda x, y: np.sin(-y),
+    ),
+    (
+        lambda x, y: np.sin(x + y),
+        lambda x, y: -2 * np.sin(x + y) + np.cos(x + y) / x,
+    ),
+    (
+        lambda x, y: np.sin(x - y),
+        lambda x, y: -2 * np.sin(x - y) + np.cos(x - y) / x,
+    ),
+]
+testfuncs["ddR"] = [
+    (
+        lambda x, y: np.sin(x),
+        lambda x, y: np.cos(x),
+    ),
+    (
+        lambda x, y: np.cos(x),
+        lambda x, y: -np.sin(x),
+    ),
+    (
+        lambda x, y: np.sin(y),
+        lambda x, y: 0,
+    ),
+    (
+        lambda x, y: np.sin(x + y),
+        lambda x, y: np.cos(x + y),
+    ),
+    (
+        lambda x, y: np.sin(x - y),
+        lambda x, y: np.cos(x - y),
+    ),
+]
+testfuncs["ddZ"] = [
+    (
+        lambda x, y: np.sin(y),
+        lambda x, y: np.cos(y),
+    ),
+    (
+        lambda x, y: np.cos(y),
+        lambda x, y: -np.sin(y),
+    ),
+    (
+        lambda x, y: np.sin(x),
+        lambda x, y: 0,
+    ),
+    (
+        lambda x, y: np.sin(x + y),
+        lambda x, y: np.cos(x + y),
+    ),
+    (
+        lambda x, y: np.sin(x - y),
+        lambda x, y: -np.cos(x - y),
+    ),
+]
 
 
 def read(fn):
-    with DataFile(fn, write=True) as f:
+    with DataFile(fn) as f:
         return f["R"], f["Z"]
 
 
@@ -257,18 +331,83 @@ def invertMatrix(pos):
     dist = -np.array(
         [[x - np.roll(np.roll(x, -i, 0), -j, 2) for x in pos] for i, j in posi]
     )
-    A = genMatrix(dist)
-    iA = np.empty_like(A)
-    iA[:] = np.nan
-    for ijk in itertools.product(
-        *[range(k) for k in A.shape[:-2]], desc=f"Inverting [{tot:2d}/{totals}]"
-    ):
-        iA[ijk] = np.transpose(np.linalg.inv(np.transpose(A[ijk])))
-    return A, iA
+    return genMatrix(dist)
 
 
-def update_facs(old, pos, A, tol, eps, badeps=1e-2, nfev=1e3):
-    iR = 1 / pos[0]
+_cache_u_f = ()
+
+
+class SharedNumpy:
+    __slots__ = (
+        "arr",
+        "shm",
+        "name",
+        "shared",
+    )
+
+    def __init__(self, arr: np.ndarray = None):
+        if arr is not None:
+            self.shm = shared_memory.SharedMemory(create=True, size=arr.nbytes)
+            self.arr = np.ndarray(arr.shape, dtype=arr.dtype, buffer=self.shm.buf)
+            self.name = self.shm.name
+            np.copyto(self.arr, arr)
+
+    def __getattr__(self, item):
+        if hasattr(self.arr, item):
+            return getattr(self.arr, item)
+        raise AttributeError(
+            f"{self.__class__.__name__}, doesn't have attribute {item!r}"
+        )
+
+    def __str__(self):
+        return str(self.arr)
+
+    @classmethod
+    def from_name(cls, name, shape, dtype):
+        memory = cls(arr=None)
+        memory.shm = shared_memory.SharedMemory(name)
+        memory.arr = np.ndarray(shape, dtype=dtype, buffer=memory.shm.buf)
+        memory.name = name
+        return memory
+
+    @property
+    def dtype(self):
+        return self.arr.dtype
+
+    @property
+    def shape(self):
+        return self.arr.shape
+
+
+class LS:
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+        # self.old = SharedNumpy.from_name(self.old, self.shape, self.dtype)
+
+    def getopt(s, ijk):
+        ijk = tuple(ijk)
+        return leastsq(
+            s.ef,
+            s.old[ijk],
+            max_nfev=int(s.nfev),
+            args=(s.A[ijk], s.target[ijk], s.epsn),
+            gtol=s.tol,
+            ftol=s.tol,
+            xtol=s.tol,
+            jac=s.ja,
+        ).x
+
+
+def update_facs(
+    old, pos, A, target, testfunc, scale, scalepower, tol, eps, badeps=1e-2, nfev=1e3
+):
+    gridscale = (192 / A.shape[2]) ** scalepower
+    badeps *= gridscale
+    badeps *= scale
+    eps /= gridscale
+    tol *= gridscale
+    tol = max(2.3e-16, tol)
     # print("starting dot")
     # t2 = np.empty((*A.shape[:3], A.shape[-1]))
     # for ijk in itertools.product(*[range(k) for k in A.shape[:-2]]):
@@ -277,52 +416,82 @@ def update_facs(old, pos, A, tol, eps, badeps=1e-2, nfev=1e3):
     # plt.pcolormesh(*[x[:, 2] for x in pos], t2[:, 2, :, 3])
     # plt.colorbar()
     # plt.show()
-    errHist(getError(old, pos))
+    # errHist(getError(old, pos))
     # getBad(old, pos, 3)
-    getBad(old, pos, 3)
-    showMeBad(old, pos)
-    plt.show()
+    # getBad(old, pos, 3)
+    # showMeBad(old, pos)
+    # plt.show()
     nf = old.copy()
-    # target = np.array([0, 0, 1, 0, 0, 0, 1, 0, 0])
-    bad = getBad(old, pos, 0, cutoff=badeps)
-    print(np.sum(getBad(nf, pos, 0, badeps)), np.max(getError(nf, pos)))
+    bad = getBad(old, pos, testfunc, 0, cutoff=badeps)
+    print(
+        np.sum(getBad(nf, pos, testfunc, 0, badeps)),
+        np.max(getError(nf, pos, testfunc)),
+    )
+    if not np.any(bad):
+        return nf
+    ijks = np.array(np.where(bad)).T
+
+    print(ijks.shape)
+    ef, ja, epsn = (
+        (errFunc2, jac2, eps * sign0) if scalepower == 2 else (errFunc, jac, eps)
+    )
     global tot, totals
-    with tqdm(
-        desc=f"Improving [{tot:2d}/{totals}]", total=np.sum(np.array(bad)), smoothing=0
-    ) as prog:
-        for ijk in itertools.product(*[range(k) for k in A.shape[:-2]], disable=True):
-            if not bad[ijk]:
-                continue
-            target = np.array([0, 0, 1, iR[ijk], 0, 0, 1, 0, 0])
-            newfac = leastsq(
-                errfunc,
-                old[ijk],
-                max_nfev=int(nfev),
-                args=(A[ijk], target, eps),
-                gtol=tol,
-                ftol=tol,
-                xtol=tol,
-                jac=jac,
+
+    # ls = LS(ef=ef, old=old, nfev=nfev, A=A, target=target, epsn=epsn, tol=tol, ja=ja)
+
+    results = tqdm(
+        [
+            pool.apply_async(
+                leastsq,
+                (ef, old[tuple(ijk)]),
+                dict(
+                    max_nfev=int(nfev),
+                    args=(A[tuple(ijk)], target[tuple(ijk)], epsn),
+                    gtol=tol,
+                    ftol=tol,
+                    xtol=tol,
+                    jac=ja,
+                ),
             )
-            nf[ijk] = newfac.x
-            prog.update()
-    print(np.sum(getBad(nf, pos, 0, badeps)), np.max(getError(nf, pos)))
-    errHist(getError(nf, pos))
-    getBad(old, pos, 3)
-    plt.show()
+            for ijk in ijks
+        ],
+        desc=f"Improving [{tot:2d}/{totals}]",
+        smoothing=0,
+    )
+
+    for ijk, newfac in zip(ijks, results):
+        nf[tuple(ijk)] = newfac.get().x
+
+    # # def getopt(ef, old, nvew, A, target, epsn,  tol, ja, ijk)
+    # with tqdm(
+    #     desc=f"Improving [{tot:2d}/{totals}]", total=np.sum(np.array(bad)), smoothing=0
+    # ) as prog:
+    #     for ijk in itertools.product(*[range(k) for k in A.shape[:-2]], disable=True):
+    #         if not bad[ijk]:
+    #             continue
+    #         newfac = leastsq(
+    #             ef,
+    #             old[ijk],
+    #             max_nfev=int(nfev),
+    #             args=(A[ijk], target[ijk], epsn),
+    #             gtol=tol,
+    #             ftol=tol,
+    #             xtol=tol,
+    #             jac=ja,
+    #         )
+    #         nf[ijk] = newfac.x
+    #         prog.update()
+    print(
+        np.sum(getBad(nf, pos, testfunc, 0, badeps)),
+        np.max(getError(nf, pos, testfunc)),
+        tol,
+        eps,
+        badeps,
+    )
+    # errHist(getError(nf, pos))
+    # getBad(old, pos, 3)
+    # plt.show()
     return nf
-
-
-def write(fn, nf, posi):
-    with DataFile(fn, write=True) as f:
-        f.write(
-            "delp2_3x3",
-            xr.DataArray(nf, dims=("x", "y", "z", "offset_3x3")),
-        )
-        f.write(
-            "offset_3x3",
-            xr.DataArray(posi, dims=("offset", "delta_xz")),
-        )
 
 
 def errHist(err):
@@ -334,11 +503,11 @@ def errHist(err):
     plt.gca().set_xscale("log")
 
 
-def getBad(nf, pos, plot=1, cutoff=1e-2):
-    return getError(nf, pos, None, plot) > cutoff
+def getBad(nf, pos, tf, plot=1, cutoff=1e-2):
+    return getError(nf, pos, tf, None, plot) > cutoff
 
 
-def getError(nf, pos, slc=None, plot=0):
+def getError(nf, pos, testfuncs, slc=None, plot=0):
     err = None
     if slc is None:
         slc = slice(None)
@@ -356,8 +525,8 @@ def getError(nf, pos, slc=None, plot=0):
     return err
 
 
-def showMeBad(nf, pos):
-    err = getError(nf, pos)
+def showMeBad(nf, pos, tf):
+    err = getError(nf, pos, tf)
     ijk = argmax(err)
     j = ijk[1]
     slc = slice(1, -1), j
@@ -372,8 +541,23 @@ def showMeBad(nf, pos):
     plt.plot(*[x[slc].T for x in pos])
     plt.colorbar()
     plt.figure()
-    plt.pcolormesh(nf[ijk].reshape((3, 3)))
+    plt.pcolormesh(getFull(nf[ijk]).reshape((3, 3)))
     plt.colorbar()
+
+
+def write(fn, nf, name):
+    with DataFile(fn, write=True) as f:
+        nff = getFull(nf)
+        for i in range(nff.shape[-1]):
+            f.write(
+                f"{name}_3x3_{i}",
+                xr.DataArray(nff[..., i], dims=("x", "y", "z")),
+            )
+        for j, d in enumerate("xz"):
+            for i in range(nff.shape[-1]):
+                f.write(f"{d}offset_3x3_{i}", posi[i][j])
+    global tot
+    tot += 1
 
 
 posi = getPosi(1)
@@ -382,24 +566,46 @@ kws = getKW()
 
 
 def doall(fn):
+    global tot
     # tot = tqdm(total=len(kws) + 2, desc="Total progress", unit="step")
+    pos = read(fn)
+    A = invertMatrix(pos)
+    tot += 1
+
+    target = np.zeros(A.shape[:-1])
+    target[..., 2] = 1
+    target[..., 6] = 1
+    target[..., 3] = 1 / pos[0]
+    nf = doone(pos, A, target, testfuncs["delp2"], 10, 2)
+    write(fn, nf, "delp2")
+
+    target = np.zeros(A.shape[:-1])
+    target[..., 3] = 1
+    nf = doone(pos, A, target, testfuncs["ddR"], 1e-2, 1)
+    write(fn, nf, "ddR")
+
+    target = np.zeros(A.shape[:-1])
+    target[..., 1] = 1
+    nf = doone(pos, A, target, testfuncs["ddZ"], 1e-2, 1)
+    write(fn, nf, "ddZ")
+
+
+def doone(pos, A, target, testfunc, scale, scalepower):
     global tot
 
-    pos = read(fn)
-    A, iA = invertMatrix(pos)
-    tot += 1
-    delp2coefs = iA[..., 2, :] + iA[..., 6, :] + iA[..., 3, :] / pos[0][..., None]
-    # delp2coefs = delp2coefs[:, :, :, no4]
+    delp2coefs = np.linalg.solve(A.transpose(0, 1, 2, 4, 3), target)
 
     nfs = [delp2coefs]
 
     for kw in kws:
-        nfs.append(update_facs(nfs[-1], pos, A, **kw))
+        nfs.append(
+            update_facs(nfs[-1], pos, A, target, testfunc, scale, scalepower, **kw)
+        )
         tot += 1
 
     stats = []
     for i, nfi in enumerate(nfs):
-        err = getError(nfi, pos)
+        err = getError(nfi, pos, testfunc)
         stats.append((i, np.max(err), np.mean(err)))
 
     bests = []
@@ -412,27 +618,20 @@ def doall(fn):
     best = bests[0]
     nf = nfs[best[0]]
     if best[2] > 1e-1:
-        getBad(nf, pos, 3)
-        errHist(getError(nf, pos))
-        showMeBad(nf)
+        getBad(nf, pos, testfunc, 3, 1e-1)
+        errHist(getError(nf, pos, testfunc))
+        showMeBad(nf, pos, testfunc)
         plt.show()
+    return nf
 
-    with DataFile(fn, write=True) as f:
-        nff = np.concatenate(nf[..., :4], -np.sum(nf, axis=-1), nf[..., 4:])
-        f.write(
-            "delp2_3x3",
-            xr.DataArray(nff, dims=("x", "y", "z", "offset_3x3")),
-        )
-        f.write(
-            "offset_3x3",
-            xr.DataArray(posi, dims=("offset", "delta_xz")),
-        )
-        tot += 1
 
+pool = None
+pool_size = 36
 
 if __name__ == "__main__":
-    totals = (len(kws) + 2) * len(sys.argv[1:])
+    totals = (len(kws) * 3 + 2) * len(sys.argv[1:])
     tot = 0
-    for fn in sys.argv[1:]:
-        doall(fn)
+    with Pool(processes=pool_size) as pool:
+        for fn in sys.argv[1:]:
+            doall(fn)
 # fn = "W7X-conf0-36x36x192.emc3.inner:f.vessel:f.island:f.fci.nc.new"
