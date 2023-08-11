@@ -309,7 +309,7 @@ def W7X(
         with timeit2("Aligning to EMC3 grid"):
             if isinstance(emc3_file, bool):
                 emc3_file = "emc3.nc"
-            outer_new = get_emc3_shape(emc3_file, "outer", ycoords, nz * 10)
+            outer_new = get_emc3_shape(emc3_file, "outer", ycoords, 192 * 10)
             outer_lines = get_inner(outer_new, outer_lines)
             if show_lines:
                 history_outer["emc3"] = outer_new
@@ -437,7 +437,7 @@ def W7X(
     with timeit2("Getting tracer took"):
         tracer = (
             zb.fieldtracer.FieldTracerWeb(
-                configId=configuration, stepsize=0.01, retry=100
+                configId=configuration, stepsize=1e-2, retry=100
             )
             if trace_web
             else None
