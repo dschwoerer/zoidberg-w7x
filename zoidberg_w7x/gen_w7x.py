@@ -43,13 +43,13 @@ def gen(conf, shape, fn, return_args=False, **kw):
 
 
 def gen2(fn, return_args=False):
-    args = re.match(r"^W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$", fn)
+    args = re.match(r"^(.*/)?W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$", fn)
     if not args:
         print(f"'{fn}' is not a valid filename")
         return
 
     args = args.groups()
-    args = [int(x) for x in args[:4]] + list(args[4:])
+    args = [int(x) for x in args[1:5]] + list(args[5:])
     conf = args[0]
     shape = args[1:4]
     known_opts = dict(
