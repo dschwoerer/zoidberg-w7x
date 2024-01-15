@@ -259,6 +259,7 @@ def W7X(
     fname="W7-X.fci.nc",
     vmec_file="w7-x.wout.nc",
     emc3_file=None,
+    emc3_smooth=None,
     inner_VMEC=False,
     inner_vacuum=False,
     outer_VMEC=False,
@@ -309,7 +310,11 @@ def W7X(
         with timeit2("Aligning to EMC3 grid"):
             if isinstance(emc3_file, bool):
                 emc3_file = "emc3.nc"
-            outer_new = get_emc3_shape(emc3_file, "outer", ycoords, 192 * 10)
+            nzo = 192 * 10
+            if emc3_smooth is not None:
+                nzo //= emc3_smooth
+                print(nzo)
+            outer_new = get_emc3_shape(emc3_file, "outer", ycoords, nzo)
             outer_lines = get_inner(outer_new, outer_lines)
             if show_lines:
                 history_outer["emc3"] = outer_new
@@ -1564,15 +1569,28 @@ def get_emc3_shape(fn, direction, ycoords, nz):
 
         assert_valid(np.array(spl))
         bounds = nz // 50
+        bounds0 = bounds
         if bounds < 2:
             bounds = 2
         while bounds > 1:
-            splnew = smooth(*spl, bounds=bounds, plot=False)
-            try:
-                assert_valid(np.array(splnew))
-            except:
-                splnew = smooth(*spl, bounds=bounds, plot=True)
-                raise
+            splnew = smooth(*spl, bounds=bounds, plot=0)
+            bounds_smooth = bounds
+            while True:
+                try:
+                    assert_valid(np.array(splnew))
+                except:
+                    if bounds_smooth < bounds0 + 1:
+                        bounds_smooth += 1
+                        splnew = smooth(
+                            *spl, bounds=bounds_smooth, plot=0, bounds_find=bounds
+                        )
+                        continue
+                    print(bounds, bounds_smooth, bounds0)
+                    smooth(*spl, bounds=bounds_smooth, plot=True, bounds_find=bounds)
+                    smooth(*spl, bounds=bounds, plot=True)
+                    raise
+                else:
+                    break
             spl = splnew
             bounds //= 2
         points.append(spl)

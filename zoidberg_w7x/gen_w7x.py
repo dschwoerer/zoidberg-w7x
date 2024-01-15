@@ -60,6 +60,9 @@ def gen2(fn, return_args=False):
         inner="inner_VMEC",
         emc3="emc3_file",
         redist="redistribute",
+        emc3_smooth="emc3_smooth",
+        mfi="maxfac_inner",
+        offt="outer_fft",
     )
     kw = dict(
         outer_VMEC=False,
