@@ -284,6 +284,7 @@ def W7X(
     redistribute=0,
     return_lines=False,
     return_poloidal_grid=False,
+    maxfac_inner=3,
 ):
     if vmec_url is None:
         urls = {
@@ -573,7 +574,14 @@ def W7X(
     with timeit2("Creating poloidal grids"):
         poloidal_grid = [
             zb.poloidal_grid.grid_elliptic(
-                inner, outer, nx, nz, show=show_maps, nx_outer=2
+                inner,
+                outer,
+                nx,
+                nz,
+                show=show_maps,
+                nx_outer=2,
+                nx_inner=2,
+                maxfac_inner=maxfac_inner,
             )
             for inner, outer in zip(inner_lines, outer_lines)
         ]
