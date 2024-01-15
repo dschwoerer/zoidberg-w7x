@@ -9,6 +9,8 @@ import os
 from functools import partial
 from multiprocessing import Pool, context as mpcontext
 
+from inspect import signature
+
 import matplotlib.pyplot as plt
 import numpy as np
 import zoidberg as zb
@@ -287,6 +289,8 @@ def W7X(
     maxfac_inner=3,
     outer_fft=None,
 ):
+    kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
+
     if vmec_url is None:
         urls = {
             # 0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref_171/wout.nc",
@@ -668,6 +672,14 @@ def W7X(
     maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["w7x_configuration_id"] = configuration
+    for k, v in kwargs.items():
+        if isinstance(v, bool):
+            v = int(v)
+        if v is None:
+            v = str(None)
+
+        maps[f"option:{k}"] = v
+
     with timeit("Writing maps took %f"):
         zb.write_maps(grid, field, maps, str(fname), metric2d=False)
 
