@@ -2,21 +2,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import hashlib
-import random
-import time
-import sys
 import os
+import random
+import sys
+import time
 from functools import partial
-from multiprocessing import Pool, context as mpcontext
-
 from inspect import signature
+from multiprocessing import Pool
+from multiprocessing import context as mpcontext
 
 import matplotlib.pyplot as plt
 import numpy as np
 import zoidberg as zb
-from boututils.datafile import DataFile
 from boututils.boutarray import BoutArray
 from boututils.calculus import deriv
+from boututils.datafile import DataFile
 from scipy.interpolate import interp1d
 from tqdm.auto import tqdm
 
@@ -356,8 +356,8 @@ def W7X(
             history_outer["poincare"] = outer_new
 
     if outer_islands:
-        import shapely.geometry as sg
         import shapely
+        import shapely.geometry as sg
 
         if outer_islands is True:
             outer_islands = 0.1
@@ -1518,11 +1518,9 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     except FileNotFoundError:
         pass
 
-    import xemc3
-
-    from zoidberg.smooth import smooth
-
     import scipy
+    import xemc3
+    from zoidberg.smooth import smooth
 
     try:
         from scipy.interpolate import make_smoothing_spline
