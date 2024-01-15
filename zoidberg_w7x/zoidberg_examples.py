@@ -523,7 +523,7 @@ def W7X(
 
             dy = ycoords[1] - ycoords[0]
             dat = [[[] for _ in range(num)] for _ in range(2)]
-            with Pool(12) as pool:
+            with Pool(6) as pool:
                 tracerfunc = partial(
                     tracer.follow_field_lines, chunk=int(1e8), timeout=60, retry=2
                 )
@@ -862,7 +862,7 @@ def connection_length(RZ, phi, conf, limit):
 
     chunk = max(12, int(30 / limit))
 
-    with Pool(12) as pool:
+    with Pool(6) as pool:
 
         def start(i):
             return pool.apply_async(
