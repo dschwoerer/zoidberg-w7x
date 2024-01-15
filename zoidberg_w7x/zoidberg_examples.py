@@ -285,6 +285,7 @@ def W7X(
     return_lines=False,
     return_poloidal_grid=False,
     maxfac_inner=3,
+    outer_fft=None,
 ):
     if vmec_url is None:
         urls = {
@@ -482,6 +483,18 @@ def W7X(
                 plt.show()
                 raise ValueError(f"Error is {error} and larger than expected.")
         print(f"vmec vs fieldline error is {np.max(errors)*100:.4f} %")
+
+    if outer_fft:
+        from zoidberg.spectralline import SpectralLine
+
+        onz = len(outer_lines[0].R)
+        outer_new = [SpectralLine(x, outer_fft).equallySpaced(onz) for x in outer_lines]
+        if show_lines:
+            for o, n in zip(outer_lines, outer_new):
+                o.plot(show=False)
+                n.plot(axis=plt.gca())
+            history_outer["fft"] = outer_new
+        outer_lines = outer_new
 
     if avoid_double_outer:
         print("Avoid double boundary")
