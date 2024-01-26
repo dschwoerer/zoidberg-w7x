@@ -286,6 +286,7 @@ def W7X(
     redistribute=0,
     return_lines=False,
     return_poloidal_grid=False,
+    inner_ort=True,
     maxfac_inner=3,
     outer_fft=None,
 ):
@@ -598,6 +599,7 @@ def W7X(
                 show=show_maps,
                 nx_outer=2,
                 nx_inner=2,
+                inner_ort=inner_ort,
                 maxfac_inner=maxfac_inner,
             )
             for inner, outer in zip(inner_lines, outer_lines)

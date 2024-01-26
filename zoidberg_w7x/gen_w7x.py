@@ -61,6 +61,7 @@ def gen2(fn, return_args=False):
         emc3="emc3_file",
         redist="redistribute",
         emc3_smooth="emc3_smooth",
+        inort="inner_ort",
         mfi="maxfac_inner",
         offt="outer_fft",
     )
