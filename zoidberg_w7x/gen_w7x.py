@@ -45,13 +45,20 @@ def gen(conf, shape, fn, return_args=False, **kw):
 
 
 def gen2(fn, return_args=False):
-    args = re.match(r"^(.*/)?W7X-conf(\d+)-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$", fn)
+    args = re.match(
+        r"^(.*/)?W7X-conf(\d+|[A-Z]{3}[0-9]{3})-(\d+)x(\d+)x(\d+)(.*).fci(\d*).nc$",
+        fn,
+    )
     if not args:
         print(f"'{fn}' is not a valid filename")
         return
 
     args = args.groups()
-    args = [int(x) for x in args[1:5]] + list(args[5:])
+    args = [args[1]] + [int(x) for x in args[2:5]] + list(args[5:])
+    try:
+        args[0] = int(args[0])
+    except ValueError:
+        pass
     conf = args[0]
     shape = args[1:4]
     known_opts = dict(
@@ -103,7 +110,9 @@ def gen2(fn, return_args=False):
                     val = int(val)
         else:
             val = True
-        kw[known_opts[opt]] = val
+        kwopt = known_opts.get(opt, opt)
+
+        kw[kwopt] = val
     print(kw)
     return gen(conf, shape, fn, field_refine=0, return_args=return_args, **kw)
 

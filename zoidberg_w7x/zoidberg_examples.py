@@ -302,11 +302,17 @@ def W7X(
             6: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/0972_0926_0880_0852_+0000_+0000/01/00jh/wout.nc",
         }
         if configuration not in urls:
-            raise KeyError(
-                "Do not know the appropriate vmec url for that configuartion.\n"
-                "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
-            )
-        vmec_url = urls[configuration]
+            extras = {
+                "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
+                -1: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
+            }
+            urls.update(extras)
+            if configuration not in urls:
+                raise KeyError(
+                    "Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
+                    "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
+                )
+            vmec_url = urls[configuration]
 
     symmetry = 1 if full_torus else 5
     yperiod = 2 * np.pi / symmetry
@@ -1060,7 +1066,7 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
     # print(pnts)
 
     config = flt.types.MagneticConfig()
-    config.configIds = [conf]
+    config = zb.field._set_config(config, conf)
 
     poincare = flt.types.PoincareInPhiPlane()
     poincare.numPoints = npoints
@@ -1512,7 +1518,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     import xarray as xr
     import zoidberg as zb
 
-    fnc = f"w7x_{fn}_{direction}_{myhash(ycoords, nz)}.cache.nc"
+    fnc = f"w7x_{fn.replace('/','_')}_{direction}_{myhash(ycoords, nz)}.cache.nc"
     try:
         with xr.open_dataarray(fnc) as da:
             pass
@@ -1548,6 +1554,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     points = []
     for phi in ycoords:
         try:
+            phi %= np.pi * 2 / 5
             ne = ds.emc3.sel(phi=phi).ne
             zsign = +1
         except:
