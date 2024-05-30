@@ -7,6 +7,7 @@ from . import zoidberg_examples as zbe
 from boututils.datafile import DataFile
 import zoidberg
 from . import version, soft_name
+from .stencil_dagp_fv import doit as dagp
 
 # conf          name
 # 0	w7x	standard case
@@ -40,6 +41,7 @@ def gen(conf, shape, fn, return_args=False, **kw):
             f.write_file_attribute("zoidberg_version", zoidberg.__version__)
             f.write_file_attribute("software_name", soft_name)
             f.write_file_attribute("software_version", version)
+        dagp(fn)
 
 
 def gen2(fn, return_args=False):
