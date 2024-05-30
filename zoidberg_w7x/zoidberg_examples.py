@@ -288,7 +288,9 @@ def W7X(
     return_poloidal_grid=False,
     inner_ort=True,
     maxfac_inner=3,
+    legacy_align=False,
     outer_fft=None,
+    dz_relax=None,
 ):
     kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
 
@@ -607,7 +609,9 @@ def W7X(
                 nx_outer=2,
                 nx_inner=2,
                 inner_ort=inner_ort,
+                legacy_align=legacy_align,
                 maxfac_inner=maxfac_inner,
+                dz_relax=dz_relax,
             )
             for inner, outer in zip(inner_lines, outer_lines)
         ]
