@@ -302,18 +302,14 @@ def W7X(
             4: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0690_-0690/01/00/wout.nc",
             5: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1042_1042_1127_1127_+0000_+0000/01/00/wout.nc",
             6: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/0972_0926_0880_0852_+0000_+0000/01/00jh/wout.nc",
+            "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
+            -1: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
         }
         if configuration not in urls:
-            extras = {
-                "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
-                -1: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
-            }
-            urls.update(extras)
-            if configuration not in urls:
-                raise KeyError(
-                    "Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
-                    "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
-                )
+            raise KeyError(
+                f"Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
+                "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
+            )
         vmec_url = urls[configuration]
 
     symmetry = 1 if full_torus else 5
