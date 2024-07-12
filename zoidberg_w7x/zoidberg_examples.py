@@ -314,7 +314,7 @@ def W7X(
                     "Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
                     "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
                 )
-            vmec_url = urls[configuration]
+        vmec_url = urls[configuration]
 
     symmetry = 1 if full_torus else 5
     yperiod = 2 * np.pi / symmetry
