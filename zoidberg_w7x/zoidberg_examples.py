@@ -20,6 +20,8 @@ from boututils.datafile import DataFile
 from scipy.interpolate import interp1d
 from tqdm.auto import tqdm
 
+from .stencil_dagp_fv import doit as dagp
+
 
 def screwpinch(
     nx=68,
@@ -676,11 +678,15 @@ def W7X(
     with timeit2("Calculating metric terms"):
         grid.metric()
 
+    dagp_vals = dagp(poloidal_grid)
     with timeit2("Creating maps"):
         maps = zb.make_maps(grid, field, field_tracer=tracer)
     maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["w7x_configuration_id"] = configuration
+
+    maps.update(dagp_vals)
+
     for k, v in kwargs.items():
         if isinstance(v, bool):
             v = int(v)

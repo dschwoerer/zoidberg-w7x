@@ -41,7 +41,7 @@ def gen(conf, shape, fn, return_args=False, **kw):
             f.write_file_attribute("zoidberg_version", zoidberg.__version__)
             f.write_file_attribute("software_name", soft_name)
             f.write_file_attribute("software_version", version)
-        dagp(fn)
+        # dagp(fn)
 
 
 def gen2(fn, return_args=False):
