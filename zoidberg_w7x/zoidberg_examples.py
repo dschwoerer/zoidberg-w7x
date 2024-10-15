@@ -296,7 +296,11 @@ def W7X(
     dz_relax=None,
     inner_poincare=False,
 ):
-    kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
+    try:
+        kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
+    except:
+        print("Failed to record arguments")
+        kwargs = {}
 
     if vmec_url is None:
         urls = {
