@@ -292,7 +292,9 @@ def W7X(
     maxfac_inner=3,
     legacy_align=False,
     outer_fft=None,
+    inner_fft=None,
     dz_relax=None,
+    inner_poincare=False,
 ):
     kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
 
@@ -304,8 +306,9 @@ def W7X(
             4: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0690_-0690/01/00/wout.nc",
             5: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1042_1042_1127_1127_+0000_+0000/01/00/wout.nc",
             6: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/0972_0926_0880_0852_+0000_+0000/01/00jh/wout.nc",
+            20: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0246_-0246/01/000/wout.nc",
+            21: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
             "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
-            -1: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
         }
         if configuration not in urls:
             raise KeyError(
@@ -354,7 +357,7 @@ def W7X(
             history_outer["vessel"] = outer_new
 
     if outer_poincare:
-        R0 = {0: 6.3, 4: 6.17}[configuration]
+        R0 = {0: 6.3, 4: 6.17, 20: 6.214, 21: 6.2246}[configuration]
         with timeit2(f"Aligning to poincare R={R0}"):
             outer_new = get_W7X_poincare(
                 R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
@@ -362,6 +365,13 @@ def W7X(
             outer_lines = get_inner(outer_new, outer_lines)
         if show_lines:
             history_outer["poincare"] = outer_new
+
+    if inner_poincare:
+        R0 = {20: 6.12335, 21: 6.133}[configuration]  # 20:6.12336731 21:6.13
+        with timeit2(f"Aligning to poincare R={R0}"):
+            inner_lines = get_W7X_poincare(
+                R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
+            )
 
     if outer_islands:
         import shapely
@@ -507,6 +517,18 @@ def W7X(
                 n.plot(axis=plt.gca())
             history_outer["fft"] = outer_new
         outer_lines = outer_new
+
+    if inner_fft:
+        from zoidberg.spectralline import SpectralLine
+
+        onz = len(inner_lines[0].R)
+        inner_new = [SpectralLine(x, inner_fft).equallySpaced(onz) for x in inner_lines]
+        if show_lines:
+            for o, n in zip(inner_lines, inner_new):
+                o.plot(show=False)
+                n.plot(axis=plt.gca())
+            # history_inner["fft"] = inner_new
+        inner_lines = inner_new
 
     if avoid_double_outer:
         print("Avoid double boundary")

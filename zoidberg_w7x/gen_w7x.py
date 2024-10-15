@@ -73,6 +73,9 @@ def gen2(fn, return_args=False):
         inort="inner_ort",
         mfi="maxfac_inner",
         offt="outer_fft",
+        ifft="inner_fft",
+        opnc="outer_poincare",
+        ipnc="inner_poincare",
     )
     kw = dict(
         outer_VMEC=False,
