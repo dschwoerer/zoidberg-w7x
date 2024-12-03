@@ -1541,7 +1541,62 @@ def plot_maps(field, grid, maps, yslice=0):
     plt.show()
 
 
-def get_emc3_shape(fn, direction, ycoords, nz):
+def get_emc3_shape_simple(ds, direction, phi, coords, zsign):
+    import xarray as xr
+
+    # if "zone" in ds.dims:
+    def getne(di):
+        return di.emc3.sel(phi=phi).ne
+
+    rdims = ds["_r_dims"] if "_r_dims" in ds else None
+    nes = [getne(di) for di in ds.emc3.iter_zones()]
+    # print([x.shape for x in nes])
+    if rdims is not None:
+        for i, ri in enumerate(rdims):
+            if len(nes[i].r) > ri:
+                nes[i] = nes[i].isel(r=slice(None, ri))
+    # print([ne.shape for ne in nes])
+
+    # For some reason checking for finite values fails sometimes
+    ridss = [np.argmax(x.values[::direction] > 0, axis=0) for x in nes]
+    # if np.max(rids) == 0:
+    #     print(phi, zsign)
+    #     print(np.min(rids), np.max(rids))
+    if direction == -1:
+        ridss = [len(ne.r) - x for x, ne in zip(ridss, nes)]
+    # for theta
+    coords_ = [c.emc3.sel(phi=phi) for c in coords.emc3.iter_zones()]
+    # print("b", [x.dims for x in coords_])
+    coords_ = [xr.Dataset({k: c.emc3[f"{k}_corners"] for k in "Rz"}) for c in coords_]
+    # print("c", [x.dims for x in coords_])
+
+    for c in coords_:
+        c.z.values *= zsign
+
+    def myrange(a, b):
+        if a > b:
+            return range(a, b - 1, -1)
+        return range(a, b + 1)
+
+    # print(ridss)
+    rzs = []
+    for rids, coords__ in zip(ridss, coords_):
+        out = []
+        last = rids[-1]
+        for tid, rid in enumerate(rids):
+            for cr in myrange(last, rid):
+                out.append((tid, cr))
+            last = rid
+        out = np.array(out).T
+        out_ = [xr.DataArray(o, dims="index") for o in out]
+        c__ = coords__.isel(theta=out_[0], r=out_[1])
+        # print(coords__.R, coords__.z)
+        rzs.append(np.array([c__[k].values for k in "Rz"]))
+    # print([x.shape for x in rzs])
+    return rzs
+
+
+def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
     import xarray as xr
     import zoidberg as zb
 
@@ -1567,49 +1622,87 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     with xr.open_dataset(fn) as ds:
         pass
 
-    def myrange(a, b):
-        if a > b:
-            return range(a, b - 1, -1)
-        return range(a, b + 1)
-
     coords = xr.Dataset({k: ds[k] for k in [f"{k}_bounds" for k in "Rz"]})
+    for d in ds:
+        if d.startswith("_") and d.endswith("_dims"):
+            coords[d] = ds[d]
 
     lines = []
 
-    ds = xr.Dataset({k: ds[k] for k in ["ne", "R_bounds", "z_bounds", "phi_bounds"]})
+    keys = ["ne", "R_bounds", "z_bounds", "phi_bounds"]
+    for k in ds:
+        if k.startswith("_") and k.endswith("_dims"):
+            keys.append(k)
+    ds = xr.Dataset({k: ds[k] for k in keys})
+    print("ds done")
     points = []
+    phimax = np.nanmax(ds.phi_bounds)
+    assert (
+        np.isclose(phimax, np.pi / period) or np.isclose(phimax, np.pi * 2 / period),
+    ) and np.isclose(
+        np.nanmin(ds.phi_bounds), 0
+    ), f"Expected 0 <= ds.phi_bounds <= {np.pi/period} but got {np.nanmin(ds.phi_bounds)} ... {np.nanmax(ds.phi_bounds)}"
     for phi in ycoords:
-        try:
-            phi %= np.pi * 2 / 5
-            ne = ds.emc3.sel(phi=phi).ne
+        phi %= np.pi * 2 / period
+        if phi <= phimax:
             zsign = +1
-        except:
-            phi = 2 * np.max(ds.phi_bounds) - phi
-            ne = ds.emc3.sel(phi=phi).ne
+        else:
+            phi = 2 * np.pi / period - phi
             zsign = -1
 
-        # rids = np.argmax(np.isfinite(ne.values[::direction]), axis=0)
-        rids = np.argmax(ne.values[::direction] > 0, axis=0)
-        if np.max(rids) == 0:
-            print(phi, zsign)
-            print(np.min(rids), np.max(rids))
-        if direction == -1:
-            rids = len(ne.r) - rids
-        # for theta
-        coords_ = coords.emc3.sel(phi=phi)
-        coords_ = xr.Dataset({k: coords_.emc3[f"{k}_corners"] for k in "Rz"})
-        coords_.z.values *= zsign
+        if "zone" in ds.dims:
+            import shapely as sg
 
-        out = []
-        last = rids[-1]
-        for tid, rid in enumerate(rids):
-            for cr in myrange(last, rid):
-                out.append((tid, cr))
-            last = rid
-        out = np.array(out).T
-        out_ = [xr.DataArray(o, dims="index") for o in out]
-        c__ = coords_.isel(theta=out_[0], r=out_[1])
-        rz = [c__[k].values for k in "Rz"]
+            rzsi = get_emc3_shape_simple(ds, +1, phi, coords, zsign)
+            rzso = get_emc3_shape_simple(ds, -1, phi, coords, zsign)
+            pgs = [sg.Polygon(o.T, [i.T]) for o, i in zip(rzso, rzsi)]
+
+            import shapely.plotting
+
+            assert all([p.is_valid for p in pgs])
+            try:
+                pg = sg.union_all(pgs, grid_size=1e-8)
+            except sg.lib.GEOSException:
+                pgs = [pg.buffer(1e-8) for pg in pgs]
+                try:
+                    pg = sg.union_all(pgs, grid_size=1e-8)
+                except sg.lib.GEOSException:
+                    pgs = [pg.buffer(1e-6) for pg in pgs]
+                    pg = sg.union_all(pgs, grid_size=1e-6)
+
+            if direction == -1:
+                if isinstance(pg, sg.MultiPolygon):
+                    pgs = sorted([(x.area, x) for x in enumerate(pg.geoms)])
+                    pg = pgs[-1][1][1]
+                rzs = pg.exterior
+            else:
+                if isinstance(pg, sg.MultiPolygon):
+                    pgs = pg.geoms
+                    inner = []
+                    for pg in pgs:
+                        inner += pg.interiors
+                else:
+                    inner = pg.interiors
+                inner = [sg.Polygon(x) for x in inner]
+                if len(inner) > 1:
+                    areas = [x.area for x in inner]
+                    inner = sorted(zip(areas, enumerate(inner)))
+                    print(f"Warning! Need to pick from {len(inner)} surfaces!", inner)
+                    rzs = inner[-1][1][1]
+                else:
+                    rzs = inner[0]
+                rzs = rzs.exterior
+            rz = np.array(rzs.coords).T
+            # plt.figure()
+            # if isinstance(pg, sg.MultiPolygon):
+            #     for p in pg.geos:
+            #         shapely.plotting.plot_polygon(p)
+            # else:
+            #     shapely.plotting.plot_polygon(pg)
+            # plt.plot(*rz, "rx")
+            # plt.show()
+        else:
+            rz = get_emc3_shape_simple(ds, direction, phi, coords, zsign)
 
         def get_new_theta(rz, rev=False):
             drz = [x - np.roll(x, 1) for x in rz]
@@ -1627,6 +1720,16 @@ def get_emc3_shape(fn, direction, ycoords, nz):
         # theta = np.linspace(0, np.pi * 2 * ((lke - 1) / lk), lke)
         theta = get_new_theta(rz)
         theta = np.hstack((theta, theta[: lke - lk] + np.pi * 2))
+        cutoff = np.pi * 2 / len(theta) / 100
+        while any(theta[1:] - theta[:-1] <= cutoff):
+            for i in range(len(theta) - 1):
+                if theta[i + 1] - theta[i] <= cutoff:
+                    try:
+                        new = (theta[i] + theta[i + 2]) / 2
+                    except IndexError:
+                        new = (theta[i] + theta[-1] + np.pi * 2) / 2
+                    theta[i + 1] = new
+
         k2 = np.linspace(0, np.pi * 2, nz, endpoint=False) + np.pi / lk * (lke - lk)
         splines = [
             make_smoothing_spline(theta, np.hstack((k, k[: lke - lk]))) for k in rz
