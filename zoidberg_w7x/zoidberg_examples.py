@@ -352,7 +352,7 @@ def W7X(
             history_outer["vmec"] = outer_new
 
     if outer_vessel:
-        with timeit2("Aligning to plasma vessel (EXPERIMENTAL) ..."):
+        with timeit2("Aligning to plasma vessel ..."):
             outer_new = get_W7X_vessel(phi=ycoords, nz=nz * 10)
             outer_lines = get_inner(outer_new, outer_lines)
             assert_valid(outer_lines)
