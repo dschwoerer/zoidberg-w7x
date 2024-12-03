@@ -297,7 +297,7 @@ def W7X(
 ):
     try:
         kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
-    except:
+    except:  # noqa
         print("Failed to record arguments")
         kwargs = {}
 
@@ -391,7 +391,7 @@ def W7X(
             #     conf=configuration,
             #     symmetry=symmetry,
             # )
-        with timeit2(f"calculating islands shape"):
+        with timeit2("calculating islands shape"):
             outer_new = []
             for yid, island in enumerate(islands.transpose("phi", ...)):
                 island = island.transpose(..., "Rz")
@@ -551,7 +551,7 @@ def W7X(
                     np.savetxt(fnn, dat)
                     dat.shape = (2, num, len(ycoords), 2, dat.shape[-1])
                     return dat
-                except:
+                except:  # noqa
                     print("nocache:", fnn)
 
             dy = ycoords[1] - ycoords[0]
@@ -800,6 +800,7 @@ def get_inner_outer(lines1, lines2, io):
 
     out = []
     for l1, l2 in zip(lines1, lines2):
+        l10, l20 = l1, l2
         if isinstance(l1, zb.rzline.RZline):
             l1 = np.array([l1.R, l1.Z]).T
         else:
@@ -1078,7 +1079,7 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
     try:
         with xr.open_dataarray(fn) as dat:
             return dat
-    except:
+    except:  # noqa
         print("nocache:", fn)
 
     yslices0 = np.array(yslices).copy()
@@ -1158,7 +1159,7 @@ def _get_W7X_poincare(R, phi, conf, symmetry):
     try:
         dat = xr.open_dataarray(fn)
         return dat
-    except:
+    except:  # noqa
         pass
 
     pnc = trace_poincare([R], [0], phi, 50, conf, symmetry=symmetry)
@@ -1253,9 +1254,8 @@ def get_W7X_vessel(phi=[0], nz=256, show=False):
             zb.rzline.line_from_points(*d, spline_order=1, is_sorted=True) for d in dat
         ]
         return lines
-    except:
+    except:  # noqa
         pass
-    import matplotlib.path as path
     from osa import Client
 
     srv2 = Client("http://esb.ipp-hgw.mpg.de:8280/services/MeshSrv?wsdl")
@@ -1314,8 +1314,6 @@ def get_W7X_vessel(phi=[0], nz=256, show=False):
 
 ## calculate curvature for curvilinear grids
 def calc_curvilinear_curvature(fname, field, grid, maps):
-    from scipy.signal import savgol_filter
-
     f = DataFile(str(fname), write=True)
     B = f.read("B")
 
@@ -1408,7 +1406,6 @@ def smooth_metric(
     from scipy.signal import savgol_filter
 
     f = DataFile(str(fname), write=True)
-    B = f.read("B")
     bxcvx = f.read("bxcvx")
     bxcvz = f.read("bxcvz")
     bxcvy = f.read("bxcvy")
@@ -1524,7 +1521,6 @@ def calc_iota(field, start_r, start_z):
         field, start_r, start_z, toroidal_angle
     )
     peaks = argrelextrema(result[:, 0, 0], np.greater, order=10)[0]
-    peak_locations = [result[i, 0, 0] for i in peaks]
     iota_bar = 2 * np.pi / (toroidal_angle[peaks[1]] - toroidal_angle[peaks[0]])
     return iota_bar
 
@@ -1558,8 +1554,7 @@ def get_emc3_shape(fn, direction, ycoords, nz):
     except FileNotFoundError:
         pass
 
-    import scipy
-    import xemc3
+    import xemc3  # noqa
     from zoidberg.smooth import smooth
 
     try:
