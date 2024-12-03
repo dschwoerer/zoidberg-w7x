@@ -19,7 +19,7 @@ from boututils.datafile import DataFile
 from scipy.interpolate import interp1d
 from tqdm.auto import tqdm
 
-from .stencil_dagp_fv import doit as dagp
+from zoidberg.stencil_dagp_fv import doit as dagp
 
 
 def screwpinch(
