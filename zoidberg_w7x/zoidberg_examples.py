@@ -1659,8 +1659,8 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
             return rz
 
         def get_new_theta(rz, rev=False):
-            drz = [x - np.roll(x, 1) for x in rz]
-            ids = [np.sqrt(a**2 + b**2) for a, b in zip(*drz)]
+            drz = rz - np.roll(rz, 1, 1)
+            ids = np.sqrt(drz[0] ** 2 + drz[1] ** 2)
             if rev:
                 ids = 1 / np.array(ids)
             knew = np.cumsum(ids)
