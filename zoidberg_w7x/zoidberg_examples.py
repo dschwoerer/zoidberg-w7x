@@ -35,8 +35,6 @@ def screwpinch(
     yperiod = 2 * np.pi
     field = zb.field.Screwpinch(xcentre=xcentre, yperiod=yperiod, shear=0 * 2e-1)
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
-    start_r = xcentre + a / 2.0
-    start_z = 0.0
     print("Making curvilinear poloidal grid")
     inner = zb.rzline.shaped_line(
         R0=xcentre, a=a / 2.0, elong=0, triang=0.0, indent=0, n=npoints
@@ -145,8 +143,6 @@ def rotating_ellipse(
         )
 
     if return_iota or write_iota:
-        rindices = np.linspace(start_r, xcentre + a, nx)
-        zindices = np.zeros((nx))
         iota_bar = calc_iota(field, start_r, start_z)
         if write_iota:
             f = DataFile(str(fname), write=True)
@@ -244,8 +240,6 @@ def dommaschk(
         )
 
     if return_iota or write_iota:
-        rindices = np.linspace(start_r, xcentre + a, nx)
-        zindices = np.zeros((nx))
         iota_bar = calc_iota(field, start_r, start_z)
         if write_iota:
             f = DataFile(str(fname), write=True)
@@ -304,7 +298,6 @@ def W7X(
 
     if vmec_url is None:
         urls = {
-            # 0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref_171/wout.nc",
             0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0000_+0000/01/00jh_l/wout.nc",
             3: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0750_+0750/01/00/wout.nc",
             4: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0690_-0690/01/00/wout.nc",
@@ -386,12 +379,6 @@ def W7X(
         R0 = {0: [5.698742375633017 - 1e-4]}[configuration]
         with timeit2("tracing islands for poincare"):
             islands = trace_poincare([R0], [0], ycoords, 200, configuration, symmetry)
-            # islands = _get_W7X_poincare(
-            #     R0,
-            #     phi=ycoords,
-            #     conf=configuration,
-            #     symmetry=symmetry,
-            # )
         with timeit2("calculating islands shape"):
             outer_new = []
             for yid, island in enumerate(islands.transpose("phi", ...)):
@@ -531,7 +518,6 @@ def W7X(
             for o, n in zip(inner_lines, inner_new):
                 o.plot(show=False)
                 n.plot(axis=plt.gca())
-            # history_inner["fft"] = inner_new
         inner_lines = inner_new
 
     if avoid_double_outer:
@@ -773,9 +759,6 @@ def assert_valid(line):
     dy = y - np.roll(y, 1)
     dr = dx**2 + dy**2
     bad = dr == 0
-    # if not np.any(bad):
-    #     return
-    # print(np.sum(bad))
     print(np.arange(len(bad))[bad])
     plt.plot(np.roll(x - 5, 10), label="R - 5")
     plt.plot(np.roll(y, 10), label="z")
@@ -942,9 +925,6 @@ def connection_length(RZ, phi, conf, limit):
             except ValueError:
                 print(results)
                 raise
-                # raise ValueError(
-                #     f"np.concatenate failed, shapes where {', '.join([str(x.shape) for x in results])}."
-                # )
 
     out = results
 
@@ -1056,8 +1036,6 @@ def trace_boundary(fn, conf):
             print(limit, type(limit))
             out = _connection_length([x[bnd] for x in xyz], conf, float(limit), dir)
             print("bad", np.sum(~np.isfinite(out[1])))
-            # out = _connection_length([x[bnd] for x in xyz], conf, float(limit), not dir)
-            # print("badv2", np.sum(~np.isfinite(out[1])))
 
             outs *= np.nan
             outs[:, bnd] = out[:, 0, :]
@@ -1096,7 +1074,6 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
     pnts.x1 = start_r * np.cos(yslices[0])
     pnts.x2 = start_r * np.sin(yslices[0])
     pnts.x3 = start_z
-    # print(pnts)
 
     config = flt.types.MagneticConfig()
     config = zb.field._set_config(config, conf)
@@ -1274,10 +1251,6 @@ def get_W7X_vessel(phi=[0], nz=256, show=False):
     # http://esb.ipp-hgw.mpg.de:8280/services/ComponentsDbRest/component/371/info
     ref.dataId = "371"  # component id
     w1.reference = ref
-    # w2 = srv2.types.SurfaceMeshWrap()
-    # ref = srv2.types.DataReference()
-    # ref.dataId = "341" # component id
-    # w2.reference = ref
     mset.meshes = [w1]  # , w2]
 
     lines = []
@@ -1387,12 +1360,7 @@ def calc_curvilinear_curvature(fname, field, grid, maps):
     bxcvx = (dG_zdy - dG_ydz) / J
     bxcvy = (dG_xdz - dG_zdx) / J
     bxcvz = (dG_ydx - dG_xdy) / J
-    bxcv = (
-        g_11 * (bxcvx**2)
-        + g_22 * (bxcvy**2)
-        + g_33 * (bxcvz**2)
-        + 2 * (bxcvz * bxcvx * g_13)
-    )
+
     f.write("bxcvx", bxcvx)
     f.write("bxcvy", bxcvy)
     f.write("bxcvz", bxcvz)
@@ -1473,9 +1441,7 @@ def smooth_metric(
                 )
 
     if write_to_file:
-        # f.write('bxcvx',bxcvx_smooth)
-        # f.write('bxcvy',bxcvy_smooth)
-        # f.write('bxcvz',bxcvz_smooth)
+
         f.write("J", J_smooth)
 
         if smooth_metric:
@@ -1551,25 +1517,18 @@ def get_emc3_shape_simple(ds, direction, phi, coords, zsign):
 
     rdims = ds["_r_dims"] if "_r_dims" in ds else None
     nes = [getne(di) for di in ds.emc3.iter_zones()]
-    # print([x.shape for x in nes])
     if rdims is not None:
         for i, ri in enumerate(rdims):
             if len(nes[i].r) > ri:
                 nes[i] = nes[i].isel(r=slice(None, ri))
-    # print([ne.shape for ne in nes])
 
     # For some reason checking for finite values fails sometimes
     ridss = [np.argmax(x.values[::direction] > 0, axis=0) for x in nes]
-    # if np.max(rids) == 0:
-    #     print(phi, zsign)
-    #     print(np.min(rids), np.max(rids))
     if direction == -1:
         ridss = [len(ne.r) - x for x, ne in zip(ridss, nes)]
     # for theta
     coords_ = [c.emc3.sel(phi=phi) for c in coords.emc3.iter_zones()]
-    # print("b", [x.dims for x in coords_])
     coords_ = [xr.Dataset({k: c.emc3[f"{k}_corners"] for k in "Rz"}) for c in coords_]
-    # print("c", [x.dims for x in coords_])
 
     for c in coords_:
         c.z.values *= zsign
@@ -1579,7 +1538,6 @@ def get_emc3_shape_simple(ds, direction, phi, coords, zsign):
             return range(a, b - 1, -1)
         return range(a, b + 1)
 
-    # print(ridss)
     rzs = []
     for rids, coords__ in zip(ridss, coords_):
         out = []
@@ -1591,9 +1549,7 @@ def get_emc3_shape_simple(ds, direction, phi, coords, zsign):
         out = np.array(out).T
         out_ = [xr.DataArray(o, dims="index") for o in out]
         c__ = coords__.isel(theta=out_[0], r=out_[1])
-        # print(coords__.R, coords__.z)
         rzs.append(np.array([c__[k].values for k in "Rz"]))
-    # print([x.shape for x in rzs])
     return rzs
 
 
@@ -1694,16 +1650,13 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
                     rzs = inner[0]
                 rzs = rzs.exterior
             rz = np.array(rzs.coords).T
-            # plt.figure()
-            # if isinstance(pg, sg.MultiPolygon):
-            #     for p in pg.geos:
-            #         shapely.plotting.plot_polygon(p)
-            # else:
-            #     shapely.plotting.plot_polygon(pg)
-            # plt.plot(*rz, "rx")
-            # plt.show()
         else:
             rz = get_emc3_shape_simple(ds, direction, phi, coords, zsign)
+            assert len(rz) == 1
+            rz = rz[0]
+
+        if return_early == 1:
+            return rz
 
         def get_new_theta(rz, rev=False):
             drz = [x - np.roll(x, 1) for x in rz]
@@ -1718,7 +1671,7 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
         spl = []
         lk = len(rz[0])
         lke = lk + 10
-        # theta = np.linspace(0, np.pi * 2 * ((lke - 1) / lk), lke)
+
         theta = get_new_theta(rz)
         theta = np.hstack((theta, theta[: lke - lk] + np.pi * 2))
         cutoff = np.pi * 2 / len(theta) / 100
@@ -1736,7 +1689,6 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
             make_smoothing_spline(theta, np.hstack((k, k[: lke - lk]))) for k in rz
         ]
         spl = [spl(k2) for spl in splines]
-        # spl = [spl(knew) for spl in splines]
 
         assert_valid(np.array(spl))
         bounds = nz // 50
