@@ -76,6 +76,7 @@ def gen2(fn, return_args=False):
         ifft="inner_fft",
         opnc="outer_poincare",
         ipnc="inner_poincare",
+        myg="myg",
     )
     kw = dict(
         outer_VMEC=False,

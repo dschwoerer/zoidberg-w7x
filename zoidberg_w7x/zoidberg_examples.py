@@ -294,6 +294,7 @@ def W7X(
     inner_fft=None,
     dz_relax=None,
     inner_poincare=False,
+    myg=1,
 ):
     try:
         kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
@@ -705,7 +706,7 @@ def W7X(
 
     dagp_vals = dagp(poloidal_grid)
     with timeit2("Creating maps"):
-        maps = zb.make_maps(grid, field, field_tracer=tracer)
+        maps = zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
     maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
     maps["w7x_configuration_id"] = configuration
