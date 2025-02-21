@@ -7,6 +7,7 @@ import sys
 import time
 from functools import partial
 from inspect import signature
+from itertools import chain
 from multiprocessing import Pool
 from multiprocessing import context as mpcontext
 
@@ -249,74 +250,65 @@ def dommaschk(
             print("Iota_bar = ", iota_bar)
 
 
-def W7X(
-    nx=68,
-    ny=32,
-    nz=256,
-    fname="W7-X.fci.nc",
-    vmec_file="w7-x.wout.nc",
-    emc3_file=None,
-    emc3_smooth=None,
-    inner_VMEC=False,
-    inner_vacuum=False,
-    outer_VMEC=False,
-    outer_vacuum=False,
-    outer_vessel=False,
-    outer_poincare=False,
-    outer_islands=False,
-    npoints=100,
-    a=2.5,
-    show_maps=False,
-    show_lines=False,
-    calc_curvature=False,
-    smooth_curvature=False,
-    plasma_field=False,
-    configuration=0,
-    vmec_url=None,
-    field_refine=1,
-    trace_web=True,
-    avoid_double_outer=True,
-    full_torus=False,
-    min_conn_length=3,
-    redistribute=0,
-    return_lines=False,
-    return_poloidal_grid=False,
-    inner_ort=True,
-    maxfac_inner=3,
-    legacy_align=False,
-    outer_fft=None,
-    inner_fft=None,
-    dz_relax=None,
-    inner_poincare=False,
-    myg=1,
+def _make_w7x_polgrid(
+    nx,
+    ny,
+    nz,
+    fname,
+    vmec_file,
+    emc3_file,
+    emc3_smooth,
+    inner_VMEC,
+    inner_vacuum,
+    outer_VMEC,
+    outer_vacuum,
+    outer_vessel,
+    outer_poincare,
+    outer_islands,
+    npoints,
+    a,
+    show_maps,
+    show_lines,
+    calc_curvature,
+    smooth_curvature,
+    plasma_field,
+    configuration,
+    vmec_url,
+    field_refine,
+    trace_web,
+    avoid_double_outer,
+    full_torus,
+    min_conn_length,
+    redistribute,
+    return_lines,
+    return_poloidal_grid,
+    inner_ort,
+    maxfac_inner,
+    legacy_align,
+    outer_fft,
+    inner_fft,
+    dz_relax,
+    inner_poincare,
+    myg,
+    ycoords,
+    tracer,
+    symmetry,
+    yperiod,
 ):
     try:
-        kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
-    except:  # noqa
-        print("Failed to record arguments")
-        kwargs = {}
+        with zb.zoidberg.bdata.DataFile(fname) as f:
+            R = f["R"]
+            Z = f["Z"]
+            if R is not None and Z is not None:
+                _, ny, _ = R.shape
+                assert R.shape == Z.shape
+                return [
+                    zb.poloidal_grid.StructuredPoloidalGrid(R[:, i], Z[:, i])
+                    for i in range(ny)
+                ], True
+    except FileNotFoundError:
+        pass
 
-    if vmec_url is None:
-        urls = {
-            0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0000_+0000/01/00jh_l/wout.nc",
-            3: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0750_+0750/01/00/wout.nc",
-            4: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0690_-0690/01/00/wout.nc",
-            5: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1042_1042_1127_1127_+0000_+0000/01/00/wout.nc",
-            6: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/0972_0926_0880_0852_+0000_+0000/01/00jh/wout.nc",
-            20: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0246_-0246/01/000/wout.nc",
-            21: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
-            "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
-        }
-        if configuration not in urls:
-            raise KeyError(
-                f"Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
-                "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
-            )
-        vmec_url = urls[configuration]
-
-    symmetry = 1 if full_torus else 5
-    yperiod = 2 * np.pi / symmetry
-    ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
     outer_lines = None
     history_outer = {}
 
@@ -433,19 +425,6 @@ def W7X(
     zmin = np.min([min(outer_lines[i].Z) for i in range(ny)])
     zmax = np.max([max(outer_lines[i].Z) for i in range(ny)])
 
-    with timeit2("Creating a field"):
-        if field_refine:
-            field = zb.field.W7X_vacuum(
-                *[x * field_refine for x in (128, 32, 128)],
-                phimax=yperiod,
-                x_range=[xmin, xmax],
-                z_range=[zmin, zmax],
-                include_plasma_field=plasma_field,
-                configuration=configuration,
-            )
-        else:
-            field = zb.field.W7X_vacuum_on_demand(configuration)
-
     if inner_VMEC:
         with timeit2("Aligning to inner VMEC flux surface"):
             if inner_VMEC is True:
@@ -454,14 +433,6 @@ def W7X(
                 phi=ycoords, s=inner_VMEC, npoints=nz * 2, w7x_run=vmec_url
             )
 
-    with timeit2("Getting tracer took"):
-        tracer = (
-            zb.fieldtracer.FieldTracerWeb(
-                configId=configuration, stepsize=1e-2, retry=100
-            )
-            if trace_web
-            else None
-        )
     check_VMEC = True
     if inner_VMEC and check_VMEC:
         import shapely.geometry as sg
@@ -487,9 +458,9 @@ def W7X(
             error = vmec.symmetric_difference(tracing).area / vmec.area
             errors.append(error)
             if error > 2e-2:
-                for d, l in zip(vt, ("vmec", "tracing")):
-                    plt.plot(d.R, d.Z, "-", label=l)
-                    plt.plot(d.R, -d.Z, "-", label=l + " ud")
+                for d, lbl in zip(vt, ("vmec", "tracing")):
+                    plt.plot(d.R, d.Z, "-", label=lbl)
+                    plt.plot(d.R, -d.Z, "-", label=lbl + " ud")
                 plt.plot(vt[1].R, vt[1].Z, "x")
                 plt.title(f"config={configuration} ; y_id={yid} ; error={error}")
                 plt.legend()
@@ -683,32 +654,202 @@ def W7X(
                 for inner, outer in zip(inner_lines, outer_lines)
             ]
 
+    return poloidal_grid, False
+
+
+def W7X(
+    nx=68,
+    ny=32,
+    nz=256,
+    fname="W7-X.fci.nc",
+    vmec_file="w7-x.wout.nc",
+    emc3_file=None,
+    emc3_smooth=None,
+    inner_VMEC=False,
+    inner_vacuum=False,
+    outer_VMEC=False,
+    outer_vacuum=False,
+    outer_vessel=False,
+    outer_poincare=False,
+    outer_islands=False,
+    npoints=100,
+    a=2.5,
+    show_maps=True,
+    show_lines=False,
+    calc_curvature=False,
+    smooth_curvature=False,
+    plasma_field=False,
+    configuration=0,
+    vmec_url=None,
+    field_refine=1,
+    trace_web=True,
+    avoid_double_outer=True,
+    full_torus=False,
+    min_conn_length=3,
+    redistribute=0,
+    return_lines=False,
+    return_poloidal_grid=False,
+    inner_ort=True,
+    maxfac_inner=3,
+    legacy_align=False,
+    outer_fft=None,
+    inner_fft=None,
+    dz_relax=None,
+    inner_poincare=False,
+    myg=1,
+):
+    try:
+        kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
+    except:  # noqa
+        print("Failed to record arguments")
+        kwargs = {}
+
+    if vmec_url is None:
+        urls = {
+            0: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0000_+0000/01/00jh_l/wout.nc",
+            3: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_+0750_+0750/01/00/wout.nc",
+            4: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0690_-0690/01/00/wout.nc",
+            5: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1042_1042_1127_1127_+0000_+0000/01/00/wout.nc",
+            6: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/0972_0926_0880_0852_+0000_+0000/01/00jh/wout.nc",
+            20: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0246_-0246/01/000/wout.nc",
+            21: "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
+            "FMM002": "http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/1000_1000_1000_1000_-0264_-0264/01/000/wout.nc",
+        }
+        if configuration not in urls:
+            raise KeyError(
+                f"Do not know the appropriate vmec url for configuartion '{configuration}'.\n"
+                "Check http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/geiger/w7x/"
+            )
+        vmec_url = urls[configuration]
+
+    symmetry = 1 if full_torus else 5
+    yperiod = 2 * np.pi / symmetry
+    ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
+
+    with timeit2("Creating a field"):
+        if field_refine:
+            raise RuntimeError("Not implemented anymore")
+        else:
+            field = zb.field.W7X_vacuum_on_demand(configuration)
+
+    with timeit2("Getting tracer took"):
+        tracer = (
+            zb.fieldtracer.FieldTracerWeb(
+                configId=configuration, stepsize=1e-2, retry=100
+            )
+            if trace_web
+            else None
+        )
+
+    ret = _make_w7x_polgrid(
+        nx,
+        ny,
+        nz,
+        fname,
+        vmec_file,
+        emc3_file,
+        emc3_smooth,
+        inner_VMEC,
+        inner_vacuum,
+        outer_VMEC,
+        outer_vacuum,
+        outer_vessel,
+        outer_poincare,
+        outer_islands,
+        npoints,
+        a,
+        show_maps,
+        show_lines,
+        calc_curvature,
+        smooth_curvature,
+        plasma_field,
+        configuration,
+        vmec_url,
+        field_refine,
+        trace_web,
+        avoid_double_outer,
+        full_torus,
+        min_conn_length,
+        redistribute,
+        return_lines,
+        return_poloidal_grid,
+        inner_ort,
+        maxfac_inner,
+        legacy_align,
+        outer_fft,
+        inner_fft,
+        dz_relax,
+        inner_poincare,
+        myg,
+        ycoords,
+        tracer,
+        symmetry,
+        yperiod,
+    )
+    if return_lines or return_poloidal_grid:
+        return ret
+    poloidal_grid, loaded = ret
+
     # Create the 3D grid by putting together 2D poloidal grids
     with timeit2("Creating a grid"):
         grid = zb.grid.Grid(poloidal_grid, ycoords, yperiod, yperiodic=True)
 
-    with timeit2("Calculating metric terms"):
-        grid.metric()
+    with zb.zoidberg.MapWriter(str(fname), create=(not loaded)) as mw:
+        if not loaded and "g33":
+            with timeit2("Calculating metric terms"):
+                grid.metric()
+            mw.addGridField(grid, field)
+        else:
+            mw.addField(field)
 
-    dagp_vals = dagp(poloidal_grid)
-    with timeit2("Creating maps"):
-        maps = zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
-    maps["phi"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
-    maps["y"] = BoutArray(ycoords, dict(bout_type="ArrayY"))
-    maps["w7x_configuration_id"] = configuration
+        with timeit2("DAGP"):
+            if not (loaded and "dagp_fv_volume" in mw.f.list()):
+                mw.writeDict(dagp(poloidal_grid))
 
-    maps.update(dagp_vals)
+        mw.writeDict(
+            {
+                "phi": BoutArray(ycoords, dict(bout_type="ArrayY")),
+                "y": BoutArray(ycoords, dict(bout_type="ArrayY")),
+                "w7x_configuration_id": configuration,
+            }
+        )
 
-    for k, v in kwargs.items():
-        if isinstance(v, bool):
-            v = int(v)
-        if v is None:
-            v = str(None)
+        with timeit2("Creating and Writing maps"):
+            haskeys = loaded
+            if haskeys:
+                for offset in chain(range(1, myg + 1), range(-1, -(myg + 1), -1)):
+                    for k in ["R", "Z", "xt_prime", "zt_prime"]:
+                        if (
+                            zb.zoidberg.parallel_slice_field_name(k, offset)
+                            not in mw.f.list()
+                        ):
+                            haskeys = False
+            if haskeys:
+                maps = {}
+                for offset in chain(range(1, myg + 1), range(-1, -(myg + 1), -1)):
+                    for k in ["R", "Z"]:
+                        key = zb.zoidberg.parallel_slice_field_name(k, offset)
+                        maps[key] = mw.f[key]
+                mw.writeParMetric(maps, myg, ycoords)
+                mw.final()
+            else:
+                if show_maps:
+                    maps = zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
+                    mw.addMaps(maps)
+                else:
+                    mw.addMaps(
+                        zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
+                    )
 
-        maps[f"option:{k}"] = v
+        ops = {}
+        for k, v in kwargs.items():
+            if isinstance(v, bool):
+                v = int(v)
+            if v is None:
+                v = str(None)
 
-    with timeit("Writing maps took %f"):
-        zb.write_maps(grid, field, maps, str(fname), metric2d=False)
+            ops[f"option:{k}"] = v
+            mw.writeDict(ops)
 
     with timeit("Calculating curvature took %f"):
         if calc_curvature:
@@ -735,13 +876,13 @@ def get_outer(lines1, lines2):
 
 def assert_valid(line):
     if isinstance(line, list):
-        for l in line:
-            assert_valid(l)
+        for ln in line:
+            assert_valid(ln)
         return
     if isinstance(line, np.ndarray):
         if len(line.shape) > 2:
-            for l in line:
-                assert_valid(l)
+            for ln in line:
+                assert_valid(ln)
             return
         if line.shape[0] == 2:
             x, y = line
