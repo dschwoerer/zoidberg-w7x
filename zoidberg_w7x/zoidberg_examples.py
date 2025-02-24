@@ -740,6 +740,7 @@ def W7X(
             if trace_web
             else None
         )
+        tracer = zb.fieldtracer.CachingFieldTracer(tracer)
 
     ret = _make_w7x_polgrid(
         nx,
