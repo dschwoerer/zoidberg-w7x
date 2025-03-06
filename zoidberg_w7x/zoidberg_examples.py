@@ -973,9 +973,12 @@ def get_inner_outer(lines1, lines2, io):
             if isinstance(res, sg.MultiPolygon):
                 plt.plot(*l1.T)
                 plt.plot(*l2.T)
-                res = list(res)
                 best = None
-                for r in res:
+                print(
+                    f"io={io}; Got multiple Polygons with areas",
+                    [x.area for x in res.geoms],
+                )
+                for r in res.geoms:
                     plt.plot(*np.array(r.exterior.coords).T, label=r.area)
                     if best is None or r.area > best.area:
                         best = r
