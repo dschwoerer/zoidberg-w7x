@@ -799,9 +799,7 @@ def W7X(
         if not loaded and "g33":
             with timeit2("Calculating metric terms"):
                 grid.metric()
-            mw.addGridField(grid, field)
-        else:
-            mw.addField(field)
+        mw.addGridField(grid, field)
 
         with timeit2("DAGP"):
             if not (loaded and "dagp_fv_volume" in mw.f.list()):
