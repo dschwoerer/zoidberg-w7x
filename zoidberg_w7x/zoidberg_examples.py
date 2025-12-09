@@ -466,9 +466,11 @@ def _make_w7x_polgrid(
             vmec, tracing = vmectracing
             assert vmec.is_valid
             if not tracing.is_valid:
-                # plt.plot(tracing.R, tracing.Z)
-                # plt.show()
-                tracing.plot()
+                print(dir(tracing.exterior))
+                # print(tracing.exterior)
+                plt.plot(*tracing.exterior.coords)
+                plt.show()
+                # tracing.plot()
             error = vmec.symmetric_difference(tracing).area / vmec.area
             errors.append(error)
             if error > 2e-2:
