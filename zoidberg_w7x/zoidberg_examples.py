@@ -835,13 +835,13 @@ def W7X(
         if not loaded and "g33":
             with timeit2("Calculating metric terms"):
                 grid.metric()
-        mw.addGridField(grid, field)
+        mw.add_grid_field(grid, field)
 
         with timeit2("DAGP"):
             if not (loaded and "dagp_fv_volume" in mw.f.list()):
-                mw.writeDict(dagp(poloidal_grid))
+                mw.write_dict(dagp(poloidal_grid))
 
-        mw.writeDict(
+        mw.write_dict(
             {
                 "phi": BoutArray(ycoords, dict(bout_type="ArrayY")),
                 "y": BoutArray(ycoords, dict(bout_type="ArrayY")),
@@ -865,14 +865,17 @@ def W7X(
                     for k in ["R", "Z"]:
                         key = zb.zoidberg.parallel_slice_field_name(k, offset)
                         maps[key] = mw.f[key]
-                mw.writeParMetric(maps, myg, ycoords)
-                mw.final()
+                for k in ["R", "Z"]:
+                    maps[k] = mw.f[k]
+                mw._write_par_metric(maps, myg, ycoords)
+                print(ycoords)
+                mw._final()
             else:
                 if show_maps:
                     maps = zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
-                    mw.addMaps(maps)
+                    mw.add_maps(maps)
                 else:
-                    mw.addMaps(
+                    mw.add_maps(
                         zb.make_maps(grid, field, field_tracer=tracer, nslice=myg)
                     )
 
@@ -884,7 +887,7 @@ def W7X(
                 v = str(None)
 
             ops[f"option:{k}"] = v
-            mw.writeDict(ops)
+        mw.write_dict(ops)
 
     with timeit("Calculating curvature took %f"):
         if calc_curvature:
