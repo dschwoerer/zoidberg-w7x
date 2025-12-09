@@ -369,7 +369,7 @@ def _make_w7x_polgrid(
             if show_lines or save_lines:
                 history_inner["poincare"] = inner_lines
 
-    if outer_islands:
+    if outer_islands is not False:
         import shapely
         import shapely.geometry as sg
 
