@@ -361,7 +361,7 @@ def _make_w7x_polgrid(
             history_outer["poincare"] = outer_new
 
     if inner_poincare:
-        R0 = {20: 6.12335, 21: 6.133}[configuration]  # 20:6.12336731 21:6.13
+        R0 = {0: 6.12335, 3: 6.16, 20: 6.12335, 21: 6.133}[configuration]
         with timeit2(f"Aligning to poincare R={R0}"):
             inner_lines = get_W7X_poincare(
                 R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
@@ -375,9 +375,9 @@ def _make_w7x_polgrid(
 
         if outer_islands is True:
             outer_islands = 0.1
-        R0 = {0: [5.698742375633017 - 1e-4]}[configuration]
+        R0, Z0 = {0: (5.698742375633017 - 1e-4, 0), 3: (6.2435, 0.05)}[configuration]
         with timeit2("tracing islands for poincare"):
-            islands = trace_poincare([R0], [0], ycoords, 200, configuration, symmetry)
+            islands = trace_poincare([R0], [Z0], ycoords, 200, configuration, symmetry)
         with timeit2("calculating islands shape"):
             outer_new = []
             for yid, island in enumerate(islands.transpose("phi", ...)):
