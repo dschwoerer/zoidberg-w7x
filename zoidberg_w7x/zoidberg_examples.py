@@ -1456,6 +1456,19 @@ def get_W7X_vessel(phi=[0], nz=256, show=False):
 
         r, z = np.array(list(all_vertices)).T
         line = zb.rzline.line_from_points(r, z, spline_order=1, is_sorted=False)
+        last = None
+        rzs = []
+        for rz in zip(line.R, line.Z):
+            if last is not None:
+                ds = np.array(last) - np.array(rz)
+                ds2 = np.sum(ds**2)
+                if ds2 < 1e-9:
+                    continue
+            last = rz
+            rzs.append(rz)
+        line = zb.rzline.line_from_points(
+            *np.array(rzs).T, spline_order=1, is_sorted=True
+        )
         assert_valid(line)
         line = line.equallySpaced(n=nz)
         assert_valid(line)
