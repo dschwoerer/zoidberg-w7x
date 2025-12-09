@@ -309,8 +309,11 @@ def _make_w7x_polgrid(
     except FileNotFoundError:
         pass
 
+    save_lines = True
+
     outer_lines = None
     history_outer = {}
+    history_inner = {}
 
     if emc3_file:
         with timeit2("Aligning to EMC3 grid"):
@@ -322,9 +325,11 @@ def _make_w7x_polgrid(
                 print(nzo)
             outer_new = get_emc3_shape(emc3_file, "outer", ycoords, nzo)
             outer_lines = get_inner(outer_new, outer_lines)
-            if show_lines:
+            if show_lines or save_lines:
                 history_outer["emc3"] = outer_new
             inner_lines = get_emc3_shape(emc3_file, "inner", ycoords, nz * 10)
+            if show_lines or save_lines:
+                history_inner["emc3"] = inner_lines
 
     if outer_VMEC:
         print("Aligning to outer VMEC flux surface...")
@@ -334,7 +339,7 @@ def _make_w7x_polgrid(
             phi=ycoords, s=outer_VMEC, npoints=nz * 10, w7x_run=vmec_url
         )
         outer_lines = get_inner(outer_new, outer_lines)
-        if show_lines:
+        if show_lines or save_lines:
             history_outer["vmec"] = outer_new
 
     if outer_vessel:
@@ -342,7 +347,7 @@ def _make_w7x_polgrid(
             outer_new = get_W7X_vessel(phi=ycoords, nz=nz * 10)
             outer_lines = get_inner(outer_new, outer_lines)
             assert_valid(outer_lines)
-        if show_lines:
+        if show_lines or save_lines:
             history_outer["vessel"] = outer_new
 
     if outer_poincare:
@@ -352,7 +357,7 @@ def _make_w7x_polgrid(
                 R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
             )
             outer_lines = get_inner(outer_new, outer_lines)
-        if show_lines:
+        if show_lines or save_lines:
             history_outer["poincare"] = outer_new
 
     if inner_poincare:
@@ -361,6 +366,8 @@ def _make_w7x_polgrid(
             inner_lines = get_W7X_poincare(
                 R0, phi=ycoords, conf=configuration, nz=nz * 10, symmetry=symmetry
             )
+            if show_lines or save_lines:
+                history_inner["poincare"] = inner_lines
 
     if outer_islands:
         import shapely
@@ -390,7 +397,7 @@ def _make_w7x_polgrid(
                 outer_new.append(cur)
             outer_lines = get_inner(outer_new, outer_lines)
             assert_valid(outer_lines)
-            if show_lines:
+            if show_lines or save_lines:
                 history_outer["island"] = outer_new
 
     if outer_vacuum or inner_vacuum:
@@ -414,11 +421,15 @@ def _make_w7x_polgrid(
             inner_lines = get_lines(
                 field, start_r, start_z, ycoords, yperiod=yperiod, npoints=npoints
             )
+            if show_lines or save_lines:
+                history_inner["vacuum"] = inner_lines
         if outer_vacuum:
             print("Aligning to outer vacuum flux surface...")
             outer_lines = get_lines(
                 field, start_r + a, start_z, ycoords, yperiod=yperiod, npoints=npoints
             )
+            if show_lines or save_lines:
+                history_outer["vacuum"] = outer_lines
 
     xmin = np.min([min(outer_lines[i].R) for i in range(ny)])
     xmax = np.max([max(outer_lines[i].R) for i in range(ny)])
@@ -432,6 +443,8 @@ def _make_w7x_polgrid(
             inner_lines = get_VMEC_surfaces(
                 phi=ycoords, s=inner_VMEC, npoints=nz * 2, w7x_run=vmec_url
             )
+            if show_lines or save_lines:
+                history_inner["vmec"] = inner_lines
 
     check_VMEC = True
     if inner_VMEC and check_VMEC:
@@ -445,6 +458,7 @@ def _make_w7x_polgrid(
             nz=nz,
             symmetry=symmetry,
         )
+        history_inner["poincare"] = tracings
         errors = []
         for yid, vmectracing in enumerate(zip(inner_lines, tracings)):
             vt = vmectracing
@@ -473,10 +487,7 @@ def _make_w7x_polgrid(
 
         onz = len(outer_lines[0].R)
         outer_new = [SpectralLine(x, outer_fft).equallySpaced(onz) for x in outer_lines]
-        if show_lines:
-            for o, n in zip(outer_lines, outer_new):
-                o.plot(show=False)
-                n.plot(axis=plt.gca())
+        if show_lines or save_lines:
             history_outer["fft"] = outer_new
         outer_lines = outer_new
 
@@ -485,10 +496,8 @@ def _make_w7x_polgrid(
 
         onz = len(inner_lines[0].R)
         inner_new = [SpectralLine(x, inner_fft).equallySpaced(onz) for x in inner_lines]
-        if show_lines:
-            for o, n in zip(inner_lines, inner_new):
-                o.plot(show=False)
-                n.plot(axis=plt.gca())
+        if show_lines or save_lines:
+            history_inner["fft"] = inner_new
         inner_lines = inner_new
 
     if avoid_double_outer:
@@ -576,6 +585,31 @@ def _make_w7x_polgrid(
             plt.legend()
             plt.title(f"{i} phi={ycoords[i]}")
         plt.show()
+    if save_lines:
+        tosave = dict(
+            inner=inner_lines,
+            outer=outer_lines,
+        )
+        import xarray as xr
+
+        ds = xr.Dataset()
+        for k, v in history_outer.items():
+            tosave[f"outer_{k}"] = v
+        for k, v in history_inner.items():
+            tosave[f"inner_{k}"] = v
+        for theta, post in (
+            (np.linspace(0, np.pi * 2, nz * 10, endpoint=False), "_highres"),
+            (np.linspace(0, np.pi * 2, nz, endpoint=False), ""),
+        ):
+            print(len(theta), theta[-1], post)
+            for k, v in tosave.items():
+                vn = np.empty((2, ny, len(theta)))
+                for i in range(ny):
+                    vn[:, i] = v[i].position(theta)
+                ds[k + post] = ("RZ", "ny", "nz" + post), vn
+        linesname = fname[:-3] + ".lines.nc"
+        ds.to_netcdf(linesname)
+        print(f"lines info written to {linesname}")
 
     if return_lines:
         return inner_lines, outer_lines
