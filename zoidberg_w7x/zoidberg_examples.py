@@ -502,7 +502,7 @@ def _make_w7x_polgrid(
                 plt.legend()
                 plt.show()
                 raise ValueError(f"Error is {error} and larger than expected.")
-        print(f"vmec vs fieldline error is {np.max(errors)*100:.4f} %")
+        print(f"vmec vs fieldline error is {np.max(errors) * 100:.4f} %")
 
     if outer_fft:
         from zoidberg.spectralline import SpectralLine
@@ -546,26 +546,33 @@ def _make_w7x_polgrid(
             dy = ycoords[1] - ycoords[0]
             dat = [[[] for _ in range(num)] for _ in range(2)]
             with Pool(6) as pool:
-                tracerfunc = partial(
-                    tracer.follow_field_lines, chunk=int(1e8), timeout=60, retry=2
-                )
-                for outer, y in zip(outer_lines, ycoords):
-                    for n in range(num):
-                        for k, dist in enumerate([dy, -dy]):
-                            dat[k][n] += [
-                                pool.apply_async(
-                                    tracerfunc,
-                                    (outer.R, outer.Z, [y, y + dist * (n + 1)]),
-                                )
-                            ]
+                if use_fsc:
+                    tracerfunc = tracer.follow_field_lines
+                else:
+                    tracerfunc = partial(
+                        tracer.follow_field_lines, chunk=int(1e8), timeout=60, retry=2
+                    )
+
                 with tqdm(
                     total=len(dat) * len(dat[0][0]) * len(dat[0]), desc="Tracing4DB"
                 ) as prog:
+                    for outer, y in zip(outer_lines, ycoords):
+                        for n in range(num):
+                            for k, dist in enumerate([dy, -dy]):
+                                args = outer.R, outer.Z, [y, y + dist * (n + 1)]
+                                if use_fsc:
+                                    dat[k][n] += [tracerfunc(*args)]
+                                    prog.update()
+                                else:
+                                    dat[k][n] += [pool.apply_async(tracerfunc, args)]
                     for dai in dat:
                         for da in dai:
                             for i in range(len(da)):
-                                da[i] = np.transpose(da[i].get()[1])
-                                prog.update()
+                                if use_fsc:
+                                    da[i] = np.transpose(da[i][1])
+                                else:
+                                    da[i] = np.transpose(da[i].get()[1])
+                                    prog.update()
 
             dat = np.array(dat)
             shape = dat.shape
@@ -590,12 +597,12 @@ def _make_w7x_polgrid(
             ]
 
         for i in range(min_conn_length):
-            history_outer[f"avoid_short_fwd_{i+1}"] = toline(fwds[i])
-            history_outer[f"avoid_short_bwd_{i+1}"] = toline(bwds[i])
+            history_outer[f"avoid_short_fwd_{i + 1}"] = toline(fwds[i])
+            history_outer[f"avoid_short_bwd_{i + 1}"] = toline(bwds[i])
             for j in range(min_conn_length):
                 if i + j < min_conn_length:
                     union = get_outer(fwds[i], bwds[j])
-                    history_outer[f"avoid_short_{i+1}_-{j+1}"] = union
+                    history_outer[f"avoid_short_{i + 1}_-{j + 1}"] = union
                     outer_lines = get_inner(outer_lines, union)
 
     if show_lines:
@@ -695,9 +702,9 @@ def _make_w7x_polgrid(
                 plt.plot(sums)
                 plt.plot([-nind, -nind], plt.ylim())
                 plt.show()
-                assert (
-                    False
-                ), "Expected to find a minimum close to zero, but failed to do so"
+                assert False, (
+                    "Expected to find a minimum close to zero, but failed to do so"
+                )
             m = pmi.metric()
             V = m["J"] * m["dx"] * m["dz"]
             weights = getWeights(V[ind], len(loi.R))
@@ -763,6 +770,7 @@ def W7X(
     dz_relax=None,
     inner_poincare=False,
     myg=1,
+    use_fsc=False,
 ):
     try:
         kwargs = {k: locals()[k] for k in signature(W7X).parameters.keys()}
@@ -792,12 +800,11 @@ def W7X(
     yperiod = 2 * np.pi / symmetry
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
 
-    avoidfsc = True  # False
     with timeit2("Creating a field"):
         if field_refine:
             raise RuntimeError("Not implemented anymore")
         else:
-            if avoidfsc:
+            if not use_fsc:
                 field = zb.field.W7X_vacuum_on_demand(configuration)
             else:
                 fsc_setup()
@@ -814,10 +821,10 @@ def W7X(
 
                 fsc_field = fsc_field.compute(fsc_grid)
 
-                field = zb.field.FusionSC(fsc_field)
+                field = zb.field.FusionSCField(fsc_field)
 
     with timeit2("Getting tracer took"):
-        if avoidfsc:
+        if not use_fsc:
             tracer = (
                 zb.fieldtracer.FieldTracerWeb(
                     configId=configuration, stepsize=1e-2, retry=100
@@ -840,7 +847,7 @@ def W7X(
             #     toroidalSymmetry=5,
             # )
 
-            tracer = zb.fieldtracer.FusionSC(
+            tracer = zb.fieldtracer.FusionSCTracer(
                 fsc_field,
                 grid=fsc_grid,
                 # geometry=fsc_geometry,
@@ -1358,9 +1365,9 @@ def trace_poincare(start_r, start_z, yslices, npoints, conf, symmetry=5, step=1e
                     ln = len(r)
                     if ln != npoints:
                         print(i0, i1, i2, i3, ln, npoints)
-                    assert np.isclose(
-                        yslices0[i1], s.phi0 % (2 * np.pi / symmetry)
-                    ), f"{yslices0[i1]} is not close to {s.phi0 % (2 * np.pi / symmetry)}"
+                    assert np.isclose(yslices0[i1], s.phi0 % (2 * np.pi / symmetry)), (
+                        f"{yslices0[i1]} is not close to {s.phi0 % (2 * np.pi / symmetry)}"
+                    )
                     dat[0, i1, i3, i2, i0, :ln] = r
                     dat[1, i1, i3, i2, i0, :ln] = xyz[2]
                     i += 1
@@ -1710,7 +1717,6 @@ def smooth_metric(
                 )
 
     if write_to_file:
-
         f.write("J", J_smooth)
 
         if smooth_metric:
@@ -1826,7 +1832,7 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
     import xarray as xr
     import zoidberg as zb
 
-    fnc = f"w7x_{fn.replace('/','_')}_{direction}_{myhash(ycoords, nz)}.cache.nc"
+    fnc = f"w7x_{fn.replace('/', '_')}_{direction}_{myhash(ycoords, nz)}.cache.nc"
     try:
         with xr.open_dataarray(fnc) as da:
             pass
@@ -1865,9 +1871,9 @@ def get_emc3_shape(fn, direction, ycoords, nz, return_early=None, period=5):
     phimax = np.nanmax(ds.phi_bounds)
     assert (
         np.isclose(phimax, np.pi / period) or np.isclose(phimax, np.pi * 2 / period),
-    ) and np.isclose(
-        np.nanmin(ds.phi_bounds), 0
-    ), f"Expected 0 <= ds.phi_bounds <= {np.pi/period} but got {np.nanmin(ds.phi_bounds)} ... {np.nanmax(ds.phi_bounds)}"
+    ) and np.isclose(np.nanmin(ds.phi_bounds), 0), (
+        f"Expected 0 <= ds.phi_bounds <= {np.pi / period} but got {np.nanmin(ds.phi_bounds)} ... {np.nanmax(ds.phi_bounds)}"
+    )
     for phi in ycoords:
         phi %= np.pi * 2 / period
         if phi <= phimax:
@@ -2019,5 +2025,3 @@ class timeit2(timeit):
         print(info, end="")
         sys.stdout.flush()
         self.info = f"\r{info} ... %s in %f s"
-
-
