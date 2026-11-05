@@ -22,6 +22,23 @@ from tqdm.auto import tqdm
 
 from zoidberg.stencil_dagp_fv import doit as dagp
 
+import fusionsc as fsc
+
+
+def fsc_setup():
+    from fusionsc.devices import w7x
+
+    fsc.resolve.importOfflineData("/raven/u/dave/soft/misc1/w7x-op21.fsc")
+
+    # Get default configuration
+    config = fsc.service.LocalConfig.newMessage()
+
+    # Adjust configuration
+    config.cpuBackend.numThreads.fixed = 6
+
+    # Apply adjusted configuration
+    fsc.backends.reconfigureLocalBackend(config)
+
 
 def screwpinch(
     nx=68,
@@ -466,10 +483,13 @@ def _make_w7x_polgrid(
             vmec, tracing = vmectracing
             assert vmec.is_valid
             if not tracing.is_valid:
-                print(dir(tracing.exterior))
-                # print(tracing.exterior)
-                plt.plot(*tracing.exterior.coords)
-                plt.show()
+                from zoidberg.spectralline import SpectralLine
+
+                l1 = vt[1]
+                print([type(x) for x in vt])
+                l1 = SpectralLine(l1, 16).equallySpaced(len(l1.R))
+                tracing = sg.Polygon(np.array((l1.R, l1.Z)).T)
+                print(tracing.is_valid)
                 # tracing.plot()
             error = vmec.symmetric_difference(tracing).area / vmec.area
             errors.append(error)
@@ -561,7 +581,17 @@ def _make_w7x_polgrid(
         assert_valid(fwds)
         assert_valid(bwds)
 
+        def toline(rzs):
+            return [
+                zb.rzline.line_from_points(
+                    *np.array(rz), spline_order=1, is_sorted=True
+                )
+                for rz in rzs
+            ]
+
         for i in range(min_conn_length):
+            history_outer[f"avoid_short_fwd_{i+1}"] = toline(fwds[i])
+            history_outer[f"avoid_short_bwd_{i+1}"] = toline(bwds[i])
             for j in range(min_conn_length):
                 if i + j < min_conn_length:
                     union = get_outer(fwds[i], bwds[j])
@@ -762,21 +792,65 @@ def W7X(
     yperiod = 2 * np.pi / symmetry
     ycoords = np.linspace(0.0, yperiod, ny, endpoint=False)
 
+    avoidfsc = True  # False
     with timeit2("Creating a field"):
         if field_refine:
             raise RuntimeError("Not implemented anymore")
         else:
-            field = zb.field.W7X_vacuum_on_demand(configuration)
+            if avoidfsc:
+                field = zb.field.W7X_vacuum_on_demand(configuration)
+            else:
+                fsc_setup()
+                assert configuration == 0
+                fsc_field = (
+                    fsc.devices.w7x.standard()
+                )  # + w7x.controlCoils([2000, 2000])
+                fsc_geometry = fsc.devices.w7x.op21Geometry()
+
+                fsc_grid = fsc.devices.w7x.defaultGrid()
+                fsc_grid.nR = 128
+                fsc_grid.nZ = 128
+                fsc_grid.nPhi = 32
+
+                fsc_field = fsc_field.compute(fsc_grid)
+
+                field = zb.field.FusionSC(fsc_field)
 
     with timeit2("Getting tracer took"):
-        tracer = (
-            zb.fieldtracer.FieldTracerWeb(
-                configId=configuration, stepsize=1e-2, retry=100
+        if avoidfsc:
+            tracer = (
+                zb.fieldtracer.FieldTracerWeb(
+                    configId=configuration, stepsize=1e-2, retry=100
+                )
+                if trace_web
+                else None
             )
-            if trace_web
-            else None
-        )
-        tracer = zb.fieldtracer.CachingFieldTracer(tracer)
+            tracer = zb.fieldtracer.CachingFieldTracer(tracer)
+        else:
+            # fsc_mapping = fsc.flt.computeMapping(
+            #     fsc_field,
+            #     np.radians([72]),  # Mapping planes
+            #     r=np.linspace(4, 7, 200),  # R values for mapping grid
+            #     z=np.linspace(-1.5, 1.5, 200),  # Z values for mapping grid
+            #     stepSize=0.01,  # Step size for tracing computation
+            #     distanceLimit=7
+            #     * 2
+            #     * np.pi
+            #     / 8,  # Distance limit for tracing computation (no field line needed to be longer than 1/10th of device)
+            #     toroidalSymmetry=5,
+            # )
+
+            tracer = zb.fieldtracer.FusionSC(
+                fsc_field,
+                grid=fsc_grid,
+                # geometry=fsc_geometry,
+                # geometryGrid=fsc.devices.w7x.defaultGeometryGrid(),
+                # mapping=fsc_mapping,
+                stepSize=0.01,
+                distanceLimit=1,
+                # targetError=1e-3,
+                # maxStepSize=0.2,
+            )
 
     ret = _make_w7x_polgrid(
         nx,
